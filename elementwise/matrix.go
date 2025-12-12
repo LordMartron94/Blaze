@@ -120,7 +120,7 @@ func BlazeElementWiseMatrixMultiplyVectorF32[T, U foundation.Numeric](
 		}
 
 		// Store result in output vector
-		memstruct.VectorSetAtUnsafe[float32](newVectorAddr, row, sum)
+		memstruct.VectorSetAtUnsafe(newVectorAddr, row, sum)
 	}
 
 	return nil
@@ -158,7 +158,7 @@ func BlazeElementWiseMatrixMultiplyVectorF64[T, U foundation.Numeric](
 		}
 
 		// Store result in output vector
-		memstruct.VectorSetAtUnsafe[float64](newVectorAddr, row, sum)
+		memstruct.VectorSetAtUnsafe(newVectorAddr, row, sum)
 	}
 
 	return nil
