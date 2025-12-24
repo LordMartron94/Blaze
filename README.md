@@ -59,6 +59,8 @@ scalar.BlazeScalarVectorAddF64[float64](
 
 Operations performed element-by-element across multiple vectors or matrices.
 
+**Important:** Element-wise operations perform operations on corresponding elements at the same position. For example, element-wise matrix multiplication multiplies `A[i,j] * B[i,j]` for each position. This is different from standard matrix multiplication (see `blaze/structure`).
+
 **Vector Operations:**
 - `BlazeElementWiseVectorAddF32` / `BlazeElementWiseVectorAddF64` - Element-wise addition
 - `BlazeElementWiseVectorSubtractF32` / `BlazeElementWiseVectorSubtractF64` - Element-wise subtraction
@@ -66,11 +68,11 @@ Operations performed element-by-element across multiple vectors or matrices.
 - `BlazeElementWiseVectorDivideF32` / `BlazeElementWiseVectorDivideF64` - Element-wise division
 
 **Matrix Operations:**
-- `BlazeElementWiseMatrixAddF32` / `BlazeElementWiseMatrixAddF64` - Element-wise addition
-- `BlazeElementWiseMatrixSubtractF32` / `BlazeElementWiseMatrixSubtractF64` - Element-wise subtraction
-- `BlazeElementWiseMatrixMultiplyF32` / `BlazeElementWiseMatrixMultiplyF64` - Standard matrix multiplication (C = A × B, where C[i,j] = Σ(A[i,k] * B[k,j]))
-- `BlazeElementWiseMatrixDivideF32` / `BlazeElementWiseMatrixDivideF64` - Element-wise division
-- `BlazeElementWiseMatrixMultiplyVectorF32` / `BlazeElementWiseMatrixMultiplyVectorF64` - Standard matrix-vector multiplication (result[i] = sum(matrix[i,j] * vector[j]))
+- `BlazeElementWiseMatrixAddF32` / `BlazeElementWiseMatrixAddF64` - Element-wise addition (C[i,j] = A[i,j] + B[i,j])
+- `BlazeElementWiseMatrixSubtractF32` / `BlazeElementWiseMatrixSubtractF64` - Element-wise subtraction (C[i,j] = A[i,j] - B[i,j])
+- `BlazeElementWiseMatrixDivideF32` / `BlazeElementWiseMatrixDivideF64` - Element-wise division (C[i,j] = A[i,j] / B[i,j])
+
+**Note:** Standard matrix multiplication (C = A × B) and matrix-vector multiplication are in `blaze/structure`, not `blaze/elementwise`.
 
 **Example:**
 ```go
@@ -83,18 +85,11 @@ elementwise.BlazeElementWiseVectorAddF64[float64](
     outputVectorMark, // destination
 )
 
-// Standard matrix multiplication: output = mat1 × mat2
-elementwise.BlazeElementWiseMatrixMultiplyF32[float32, float32](
+// Element-wise matrix addition: output[i,j] = mat1[i,j] + mat2[i,j]
+elementwise.BlazeElementWiseMatrixAddF32[float32, float32](
     mat1Mark,
     mat2Mark,
     outputMatrixMark,
-)
-
-// Standard matrix-vector multiplication: output = matrix * vector
-err := elementwise.BlazeElementWiseMatrixMultiplyVectorF64[float64](
-    matrixMark,
-    vectorMark,
-    outputVectorMark,
 )
 ```
 
@@ -205,11 +200,14 @@ metric.BlazeMetricVectorNormalizedF64[float64](
 
 ### `blaze/structure`
 
-Matrix-specific structural operations.
+Matrix-specific structural operations for linear algebra.
 
 **Operations:**
 - `BlazeStructureMatrixTranspose` - Transpose a matrix
-- Additional matrix operations for linear algebra
+- `BlazeStructureMatrixMultiplyF32` / `BlazeStructureMatrixMultiplyF64` - Standard matrix multiplication (C = A × B, where C[i,j] = Σ(A[i,k] * B[k,j]))
+- `BlazeStructureMatrixMultiplyVectorF32` / `BlazeStructureMatrixMultiplyVectorF64` - Standard matrix-vector multiplication (result[i] = Σ(matrix[i,j] * vector[j]))
+
+**Important:** These are standard linear algebra operations, not element-wise operations. For element-wise operations (where operations are performed on corresponding elements), see `blaze/elementwise`.
 
 **Example:**
 ```go
@@ -219,6 +217,20 @@ import "blaze/structure"
 structure.BlazeStructureMatrixTranspose[float64](
     inputMatrixMark,
     outputMatrixMark,
+)
+
+// Standard matrix multiplication: output = mat1 × mat2
+structure.BlazeStructureMatrixMultiplyF32[float32, float32](
+    mat1Mark,
+    mat2Mark,
+    outputMatrixMark,
+)
+
+// Standard matrix-vector multiplication: output = matrix * vector
+err := structure.BlazeStructureMatrixMultiplyVectorF64[float64, float64](
+    matrixMark,
+    vectorMark,
+    outputVectorMark,
 )
 ```
 
