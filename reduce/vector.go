@@ -7,7 +7,7 @@ import (
 	"memstruct"
 )
 
-// BlazeReduceVectorMin returns the lowest element within the vector.
+/*BlazeReduceVectorMin returns the lowest element within the vector.*/
 func BlazeReduceVectorMin[T foundation.Numeric](vector memcore.MarkRaw) T {
 	minValue := foundation.MaxValue[T]()
 
@@ -20,7 +20,7 @@ func BlazeReduceVectorMin[T foundation.Numeric](vector memcore.MarkRaw) T {
 	return minValue
 }
 
-// BlazeReduceVectorMax returns the highest element within the vector.
+/*BlazeReduceVectorMax returns the highest element within the vector.*/
 func BlazeReduceVectorMax[T foundation.Numeric](vector memcore.MarkRaw) T {
 	maxValue := foundation.MinValue[T]()
 
@@ -33,7 +33,7 @@ func BlazeReduceVectorMax[T foundation.Numeric](vector memcore.MarkRaw) T {
 	return maxValue
 }
 
-// BlazeReduceVectorSumF32 computes the linear sum of the vector’s elements in float32 precision.
+/*BlazeReduceVectorSumF32 computes the linear sum of the vector’s elements in float32 precision.*/
 func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw) float32 {
 	sum := float32(0)
 
@@ -44,7 +44,7 @@ func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw) float
 	return sum
 }
 
-// BlazeReduceVectorSumF64 computes the linear sum of the vector’s elements in float64 precision.
+/*BlazeReduceVectorSumF64 computes the linear sum of the vector’s elements in float64 precision.*/
 func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw) float64 {
 	sum := float64(0)
 
@@ -55,7 +55,7 @@ func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw) float
 	return sum
 }
 
-// BlazeReduceVectorSumSquaredF32 computes the sum of squares (used in magnitude calculation) in float32 precision.
+/*BlazeReduceVectorSumSquaredF32 computes the sum of squares (used in magnitude calculation) in float32 precision.*/
 func BlazeReduceVectorSumSquaredF32[T foundation.Numeric](vector memcore.MarkRaw) float32 {
 	sqrSum := float32(0)
 
@@ -66,7 +66,7 @@ func BlazeReduceVectorSumSquaredF32[T foundation.Numeric](vector memcore.MarkRaw
 	return sqrSum
 }
 
-// BlazeReduceVectorSumSquaredF64 computes the sum of squares (used in magnitude calculation) in float64 precision.
+/*BlazeReduceVectorSumSquaredF64 computes the sum of squares (used in magnitude calculation) in float64 precision.*/
 func BlazeReduceVectorSumSquaredF64[T foundation.Numeric](vector memcore.MarkRaw) float64 {
 	sqrSum := float64(0)
 
@@ -77,7 +77,7 @@ func BlazeReduceVectorSumSquaredF64[T foundation.Numeric](vector memcore.MarkRaw
 	return sqrSum
 }
 
-// BlazeReduceDotProductF32 computes the dot product between two vectors (float32 precision).
+/*BlazeReduceDotProductF32 computes the dot product between two vectors (float32 precision).*/
 func BlazeReduceDotProductF32[T, U foundation.Numeric](aAddr, bAddr memcore.MarkRaw) float32 {
 	dot := float32(0)
 	memstruct.VectorBinaryReadOnlyExecute(aAddr, bAddr, func(a T, b U) {
@@ -86,11 +86,25 @@ func BlazeReduceDotProductF32[T, U foundation.Numeric](aAddr, bAddr memcore.Mark
 	return dot
 }
 
-// BlazeReduceDotProductF64 computes the dot product between two vectors (float64 precision).
+/* BlazeReduceDotProductF64 computes the dot product between two vectors (float64 precision). */
 func BlazeReduceDotProductF64[T, U foundation.Numeric](aAddr, bAddr memcore.MarkRaw) float64 {
 	dot := float64(0)
 	memstruct.VectorBinaryReadOnlyExecute(aAddr, bAddr, func(a T, b U) {
 		dot += float64(a) * float64(b)
 	}, core.BlazeDefaultStride)
 	return dot
+}
+
+/* BlazeReduceVectorMeanF32 computes the arithmetic mean of the vector's elements in float32 precision.*/
+func BlazeReduceVectorMeanF32[T foundation.Numeric](vector memcore.MarkRaw) float32 {
+	sum := BlazeReduceVectorSumF32[T](vector)
+	count := float32(memstruct.VectorCapacityGet[T](vector))
+	return sum / count
+}
+
+/* BlazeReduceVectorMeanF64 computes the arithmetic mean of the vector's elements in float64 precision. */
+func BlazeReduceVectorMeanF64[T foundation.Numeric](vector memcore.MarkRaw) float64 {
+	sum := BlazeReduceVectorSumF64[T](vector)
+	count := float64(memstruct.VectorCapacityGet[T](vector))
+	return sum / count
 }
