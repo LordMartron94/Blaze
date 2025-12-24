@@ -126,3 +126,39 @@ func BlazeReduceVectorMeanF64[T foundation.Numeric](vector memcore.MarkRaw) floa
 	count := float64(memstruct.VectorCapacityGet[T](vector))
 	return sum / count
 }
+
+/*BlazeReduceCovarianceF32 computes the covariance between two vectors in float32 precision.
+Covariance measures the joint variability of two variables: Σ((a_i - meanA) * (b_i - meanB)).
+This is a basic numeric operation suitable for Blaze's numeric primitive focus.*/
+func BlazeReduceCovarianceF32[T, U foundation.Numeric](
+	vectorA memcore.MarkRaw,
+	vectorB memcore.MarkRaw,
+	meanA float32,
+	meanB float32,
+) float32 {
+	var covariance float32 = 0
+	memstruct.VectorBinaryReadOnlyExecute(vectorA, vectorB, func(a T, b U) {
+		devA := float32(a) - meanA
+		devB := float32(b) - meanB
+		covariance += devA * devB
+	}, core.BlazeDefaultStride)
+	return covariance
+}
+
+/*BlazeReduceCovarianceF64 computes the covariance between two vectors in float64 precision.
+Covariance measures the joint variability of two variables: Σ((a_i - meanA) * (b_i - meanB)).
+This is a basic numeric operation suitable for Blaze's numeric primitive focus.*/
+func BlazeReduceCovarianceF64[T, U foundation.Numeric](
+	vectorA memcore.MarkRaw,
+	vectorB memcore.MarkRaw,
+	meanA float64,
+	meanB float64,
+) float64 {
+	var covariance float64 = 0
+	memstruct.VectorBinaryReadOnlyExecute(vectorA, vectorB, func(a T, b U) {
+		devA := float64(a) - meanA
+		devB := float64(b) - meanB
+		covariance += devA * devB
+	}, core.BlazeDefaultStride)
+	return covariance
+}
