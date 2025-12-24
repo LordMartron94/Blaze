@@ -68,7 +68,7 @@ Operations performed element-by-element across multiple vectors or matrices.
 **Matrix Operations:**
 - `BlazeElementWiseMatrixAddF32` / `BlazeElementWiseMatrixAddF64` - Element-wise addition
 - `BlazeElementWiseMatrixSubtractF32` / `BlazeElementWiseMatrixSubtractF64` - Element-wise subtraction
-- `BlazeElementWiseMatrixMultiplyF32` / `BlazeElementWiseMatrixMultiplyF64` - Element-wise multiplication
+- `BlazeElementWiseMatrixMultiplyF32` / `BlazeElementWiseMatrixMultiplyF64` - Standard matrix multiplication (C = A × B, where C[i,j] = Σ(A[i,k] * B[k,j]))
 - `BlazeElementWiseMatrixDivideF32` / `BlazeElementWiseMatrixDivideF64` - Element-wise division
 - `BlazeElementWiseMatrixMultiplyVectorF32` / `BlazeElementWiseMatrixMultiplyVectorF64` - Standard matrix-vector multiplication (result[i] = sum(matrix[i,j] * vector[j]))
 
@@ -83,8 +83,8 @@ elementwise.BlazeElementWiseVectorAddF64[float64](
     outputVectorMark, // destination
 )
 
-// Multiply two matrices element-wise: output = mat1 * mat2
-elementwise.BlazeElementWiseMatrixMultiplyF32[float32](
+// Standard matrix multiplication: output = mat1 × mat2
+elementwise.BlazeElementWiseMatrixMultiplyF32[float32, float32](
     mat1Mark,
     mat2Mark,
     outputMatrixMark,
