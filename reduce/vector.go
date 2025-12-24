@@ -33,6 +33,24 @@ func BlazeReduceVectorMax[T foundation.Numeric](vector memcore.MarkRaw) T {
 	return maxValue
 }
 
+/* BlazeReduceVectorMinMax returns the lowest and highest elements within the vector. */
+func BlazeReduceVectorMinMax[T foundation.Numeric](vector memcore.MarkRaw) (min T, max T) {
+	minValue := foundation.MaxValue[T]()
+	maxValue := foundation.MinValue[T]()
+
+	memstruct.VectorUnaryReadOnlyExecute(vector, func(item T) {
+		if item < minValue {
+			minValue = item
+		}
+
+		if item > maxValue {
+			maxValue = item
+		}
+	}, core.BlazeDefaultStride)
+
+	return minValue, maxValue
+}
+
 /*BlazeReduceVectorSumF32 computes the linear sum of the vector’s elements in float32 precision.*/
 func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw) float32 {
 	sum := float32(0)
