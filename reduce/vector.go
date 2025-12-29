@@ -305,8 +305,11 @@ func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw) float
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
+	// Vectors are always contiguous (stride == element size)
+	isContiguous := true
+
 	return simd.BlazeReduceVectorSumF32Dispatch(
-		unsafe.Pointer(data), size, capacity,
+		unsafe.Pointer(data), size, capacity, isContiguous,
 		blazeReduceVectorSumF32Go[T],
 	)
 }
@@ -370,8 +373,11 @@ func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw) float
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
+	// Vectors are always contiguous (stride == element size)
+	isContiguous := true
+
 	return simd.BlazeReduceVectorSumF64Dispatch(
-		unsafe.Pointer(data), size, capacity,
+		unsafe.Pointer(data), size, capacity, isContiguous,
 		blazeReduceVectorSumF64Go[T],
 	)
 }
@@ -435,8 +441,11 @@ func BlazeReduceVectorSumSquaredF32[T foundation.Numeric](vector memcore.MarkRaw
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
+	// Vectors are always contiguous (stride == element size)
+	isContiguous := true
+
 	return simd.BlazeReduceVectorSumSquaredF32Dispatch(
-		unsafe.Pointer(data), size, capacity,
+		unsafe.Pointer(data), size, capacity, isContiguous,
 		blazeReduceVectorSumSquaredF32Go[T],
 	)
 }
@@ -500,8 +509,12 @@ func BlazeReduceVectorSumSquaredF64[T foundation.Numeric](vector memcore.MarkRaw
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
+	// Contiguity depends on element type T, not output precision
+	// Data is contiguous when stride equals element size
+	isContiguous := true // Vectors are always contiguous (stride == element size)
+
 	return simd.BlazeReduceVectorSumSquaredF64Dispatch(
-		unsafe.Pointer(data), size, capacity,
+		unsafe.Pointer(data), size, capacity, isContiguous,
 		blazeReduceVectorSumSquaredF64Go[T],
 	)
 }
@@ -579,8 +592,13 @@ func BlazeReduceDotProductF32[T, U foundation.Numeric](aAddr, bAddr memcore.Mark
 	bSize := uintptr(memcore.SizeOf[U]())
 	capacity := aCapacity
 
+	// Vectors are always contiguous (stride == element size)
+	aIsContiguous := true
+	bIsContiguous := true
+
 	return simd.BlazeReduceDotProductF32Dispatch(
 		unsafe.Pointer(aData), unsafe.Pointer(bData), aSize, bSize, capacity,
+		aIsContiguous, bIsContiguous,
 		blazeReduceDotProductF32Go[T, U],
 	)
 }
@@ -668,8 +686,13 @@ func BlazeReduceDotProductF64[T, U foundation.Numeric](aAddr, bAddr memcore.Mark
 	bSize := uintptr(memcore.SizeOf[U]())
 	capacity := aCapacity
 
+	// Vectors are always contiguous (stride == element size)
+	aIsContiguous := true
+	bIsContiguous := true
+
 	return simd.BlazeReduceDotProductF64Dispatch(
 		unsafe.Pointer(aData), unsafe.Pointer(bData), aSize, bSize, capacity,
+		aIsContiguous, bIsContiguous,
 		blazeReduceDotProductF64Go[T, U],
 	)
 }
