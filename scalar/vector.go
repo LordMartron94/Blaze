@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"blaze/simd"
 	"foundation"
 	"memcore"
 	"memstruct"
@@ -138,6 +139,23 @@ func BlazeScalarVectorMultiplyF32[T foundation.Numeric](
 	dstSize := uintptr(memcore.SizeOf[float32]())
 	capacity := memstruct.VectorCapacityGet[T](currentVectorAddr)
 
+	// Use SIMD if element sizes match float32 (4 bytes)
+	if srcSize == 4 && dstSize == 4 {
+		simd.BlazeScalarVectorMultiplyF32Dispatch(
+			unsafe.Pointer(srcData), unsafe.Pointer(dstData), srcSize, dstSize, scalar, capacity,
+			blazeScalarVectorMultiplyF32Go[T],
+		)
+	} else {
+		blazeScalarVectorMultiplyF32Go[T](
+			unsafe.Pointer(srcData), unsafe.Pointer(dstData), srcSize, dstSize, scalar, capacity,
+		)
+	}
+}
+
+//go:inline
+func blazeScalarVectorMultiplyF32Go[T foundation.Numeric](
+	srcData, dstData unsafe.Pointer, srcSize, dstSize uintptr, scalar float32, capacity uint64,
+) {
 	var i uint64
 
 	// Manually unrolled loop for stride 8
@@ -400,6 +418,23 @@ func BlazeScalarVectorMultiplyF64[T foundation.Numeric](
 	dstSize := uintptr(memcore.SizeOf[float64]())
 	capacity := memstruct.VectorCapacityGet[T](currentVectorAddr)
 
+	// Use SIMD if element sizes match float64 (8 bytes)
+	if srcSize == 8 && dstSize == 8 {
+		simd.BlazeScalarVectorMultiplyF64Dispatch(
+			unsafe.Pointer(srcData), unsafe.Pointer(dstData), srcSize, dstSize, scalar, capacity,
+			blazeScalarVectorMultiplyF64Go[T],
+		)
+	} else {
+		blazeScalarVectorMultiplyF64Go[T](
+			unsafe.Pointer(srcData), unsafe.Pointer(dstData), srcSize, dstSize, scalar, capacity,
+		)
+	}
+}
+
+//go:inline
+func blazeScalarVectorMultiplyF64Go[T foundation.Numeric](
+	srcData, dstData unsafe.Pointer, srcSize, dstSize uintptr, scalar float64, capacity uint64,
+) {
 	var i uint64
 
 	// Manually unrolled loop for stride 8

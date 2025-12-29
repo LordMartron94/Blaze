@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"blaze/simd"
 	"foundation"
 	"memcore"
 	"memstruct"
@@ -304,6 +305,16 @@ func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw) float
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
+	return simd.BlazeReduceVectorSumF32Dispatch(
+		unsafe.Pointer(data), size, capacity,
+		blazeReduceVectorSumF32Go[T],
+	)
+}
+
+//go:inline
+func blazeReduceVectorSumF32Go[T foundation.Numeric](
+	data unsafe.Pointer, size uintptr, capacity uint64,
+) float32 {
 	var sum float32
 	var i uint64
 
@@ -359,6 +370,16 @@ func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw) float
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
+	return simd.BlazeReduceVectorSumF64Dispatch(
+		unsafe.Pointer(data), size, capacity,
+		blazeReduceVectorSumF64Go[T],
+	)
+}
+
+//go:inline
+func blazeReduceVectorSumF64Go[T foundation.Numeric](
+	data unsafe.Pointer, size uintptr, capacity uint64,
+) float64 {
 	var sum float64
 	var i uint64
 
@@ -414,6 +435,16 @@ func BlazeReduceVectorSumSquaredF32[T foundation.Numeric](vector memcore.MarkRaw
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
+	return simd.BlazeReduceVectorSumSquaredF32Dispatch(
+		unsafe.Pointer(data), size, capacity,
+		blazeReduceVectorSumSquaredF32Go[T],
+	)
+}
+
+//go:inline
+func blazeReduceVectorSumSquaredF32Go[T foundation.Numeric](
+	data unsafe.Pointer, size uintptr, capacity uint64,
+) float32 {
 	var sqrSum float32
 	var i uint64
 
@@ -469,6 +500,16 @@ func BlazeReduceVectorSumSquaredF64[T foundation.Numeric](vector memcore.MarkRaw
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
+	return simd.BlazeReduceVectorSumSquaredF64Dispatch(
+		unsafe.Pointer(data), size, capacity,
+		blazeReduceVectorSumSquaredF64Go[T],
+	)
+}
+
+//go:inline
+func blazeReduceVectorSumSquaredF64Go[T foundation.Numeric](
+	data unsafe.Pointer, size uintptr, capacity uint64,
+) float64 {
 	var sqrSum float64
 	var i uint64
 
@@ -538,6 +579,16 @@ func BlazeReduceDotProductF32[T, U foundation.Numeric](aAddr, bAddr memcore.Mark
 	bSize := uintptr(memcore.SizeOf[U]())
 	capacity := aCapacity
 
+	return simd.BlazeReduceDotProductF32Dispatch(
+		unsafe.Pointer(aData), unsafe.Pointer(bData), aSize, bSize, capacity,
+		blazeReduceDotProductF32Go[T, U],
+	)
+}
+
+//go:inline
+func blazeReduceDotProductF32Go[T, U foundation.Numeric](
+	aData, bData unsafe.Pointer, aSize, bSize uintptr, capacity uint64,
+) float32 {
 	var dot float32
 	var i uint64
 
@@ -617,6 +668,16 @@ func BlazeReduceDotProductF64[T, U foundation.Numeric](aAddr, bAddr memcore.Mark
 	bSize := uintptr(memcore.SizeOf[U]())
 	capacity := aCapacity
 
+	return simd.BlazeReduceDotProductF64Dispatch(
+		unsafe.Pointer(aData), unsafe.Pointer(bData), aSize, bSize, capacity,
+		blazeReduceDotProductF64Go[T, U],
+	)
+}
+
+//go:inline
+func blazeReduceDotProductF64Go[T, U foundation.Numeric](
+	aData, bData unsafe.Pointer, aSize, bSize uintptr, capacity uint64,
+) float64 {
 	var dot float64
 	var i uint64
 
