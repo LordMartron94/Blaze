@@ -1,7 +1,9 @@
 package elementwise
 
 import (
-	"blaze/core"
+	"fmt"
+	"unsafe"
+
 	"foundation"
 	"memcore"
 	"memstruct"
@@ -34,9 +36,60 @@ Edge cases:
 func BlazeElementWiseVectorAddF32[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, newVectorAddr memcore.MarkRaw,
 ) {
-	memstruct.VectorBinaryExecute(vectorAAddr, vectorBAddr, newVectorAddr, func(a T, b U) float32 {
-		return float32(a) + float32(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform elementwise add: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	dstData := memstruct.VectorDataPtrGet[float32](newVectorAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	dstSize := uintptr(memcore.SizeOf[float32]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float32(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float32(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float32(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float32(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float32(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float32(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float32(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float32(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float32(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float32(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float32(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float32(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float32(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float32(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float32(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float32(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*float32)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = a0 + b0
+		*(*float32)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = a1 + b1
+		*(*float32)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = a2 + b2
+		*(*float32)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = a3 + b3
+		*(*float32)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = a4 + b4
+		*(*float32)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = a5 + b5
+		*(*float32)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = a6 + b6
+		*(*float32)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = a7 + b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float32(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float32(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*float32)(unsafe.Add(dstData, uintptr(i)*dstSize)) = a + b
+	}
 }
 
 /*
@@ -66,9 +119,60 @@ Edge cases:
 func BlazeElementWiseVectorAddF64[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, newVectorAddr memcore.MarkRaw,
 ) {
-	memstruct.VectorBinaryExecute(vectorAAddr, vectorBAddr, newVectorAddr, func(a T, b U) float64 {
-		return float64(a) + float64(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform elementwise add: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	dstData := memstruct.VectorDataPtrGet[float64](newVectorAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	dstSize := uintptr(memcore.SizeOf[float64]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*float64)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = a0 + b0
+		*(*float64)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = a1 + b1
+		*(*float64)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = a2 + b2
+		*(*float64)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = a3 + b3
+		*(*float64)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = a4 + b4
+		*(*float64)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = a5 + b5
+		*(*float64)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = a6 + b6
+		*(*float64)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = a7 + b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*float64)(unsafe.Add(dstData, uintptr(i)*dstSize)) = a + b
+	}
 }
 
 /*
@@ -98,9 +202,60 @@ Edge cases:
 func BlazeElementWiseVectorSubtractF32[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, newVectorAddr memcore.MarkRaw,
 ) {
-	memstruct.VectorBinaryExecute(vectorAAddr, vectorBAddr, newVectorAddr, func(a T, b U) float32 {
-		return float32(a) - float32(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform elementwise subtract: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	dstData := memstruct.VectorDataPtrGet[float32](newVectorAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	dstSize := uintptr(memcore.SizeOf[float32]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float32(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float32(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float32(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float32(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float32(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float32(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float32(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float32(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float32(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float32(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float32(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float32(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float32(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float32(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float32(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float32(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*float32)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = a0 - b0
+		*(*float32)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = a1 - b1
+		*(*float32)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = a2 - b2
+		*(*float32)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = a3 - b3
+		*(*float32)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = a4 - b4
+		*(*float32)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = a5 - b5
+		*(*float32)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = a6 - b6
+		*(*float32)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = a7 - b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float32(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float32(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*float32)(unsafe.Add(dstData, uintptr(i)*dstSize)) = a - b
+	}
 }
 
 /*
@@ -130,9 +285,60 @@ Edge cases:
 func BlazeElementWiseVectorSubtractF64[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, newVectorAddr memcore.MarkRaw,
 ) {
-	memstruct.VectorBinaryExecute(vectorAAddr, vectorBAddr, newVectorAddr, func(a T, b U) float64 {
-		return float64(a) - float64(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform elementwise subtract: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	dstData := memstruct.VectorDataPtrGet[float64](newVectorAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	dstSize := uintptr(memcore.SizeOf[float64]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*float64)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = a0 - b0
+		*(*float64)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = a1 - b1
+		*(*float64)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = a2 - b2
+		*(*float64)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = a3 - b3
+		*(*float64)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = a4 - b4
+		*(*float64)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = a5 - b5
+		*(*float64)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = a6 - b6
+		*(*float64)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = a7 - b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*float64)(unsafe.Add(dstData, uintptr(i)*dstSize)) = a - b
+	}
 }
 
 /*
@@ -162,9 +368,60 @@ Edge cases:
 func BlazeElementWiseVectorMultiplyF32[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, newVectorAddr memcore.MarkRaw,
 ) {
-	memstruct.VectorBinaryExecute(vectorAAddr, vectorBAddr, newVectorAddr, func(a T, b U) float32 {
-		return float32(a) * float32(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform elementwise multiply: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	dstData := memstruct.VectorDataPtrGet[float32](newVectorAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	dstSize := uintptr(memcore.SizeOf[float32]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float32(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float32(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float32(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float32(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float32(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float32(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float32(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float32(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float32(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float32(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float32(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float32(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float32(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float32(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float32(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float32(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*float32)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = a0 * b0
+		*(*float32)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = a1 * b1
+		*(*float32)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = a2 * b2
+		*(*float32)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = a3 * b3
+		*(*float32)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = a4 * b4
+		*(*float32)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = a5 * b5
+		*(*float32)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = a6 * b6
+		*(*float32)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = a7 * b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float32(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float32(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*float32)(unsafe.Add(dstData, uintptr(i)*dstSize)) = a * b
+	}
 }
 
 /*
@@ -194,9 +451,60 @@ Edge cases:
 func BlazeElementWiseVectorMultiplyF64[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, newVectorAddr memcore.MarkRaw,
 ) {
-	memstruct.VectorBinaryExecute(vectorAAddr, vectorBAddr, newVectorAddr, func(a T, b U) float64 {
-		return float64(a) * float64(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform elementwise multiply: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	dstData := memstruct.VectorDataPtrGet[float64](newVectorAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	dstSize := uintptr(memcore.SizeOf[float64]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*float64)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = a0 * b0
+		*(*float64)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = a1 * b1
+		*(*float64)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = a2 * b2
+		*(*float64)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = a3 * b3
+		*(*float64)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = a4 * b4
+		*(*float64)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = a5 * b5
+		*(*float64)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = a6 * b6
+		*(*float64)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = a7 * b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*float64)(unsafe.Add(dstData, uintptr(i)*dstSize)) = a * b
+	}
 }
 
 /*
@@ -227,9 +535,60 @@ Edge cases:
 func BlazeElementWiseVectorDivideF32[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, newVectorAddr memcore.MarkRaw,
 ) {
-	memstruct.VectorBinaryExecute(vectorAAddr, vectorBAddr, newVectorAddr, func(a T, b U) float32 {
-		return float32(a) / float32(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform elementwise divide: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	dstData := memstruct.VectorDataPtrGet[float32](newVectorAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	dstSize := uintptr(memcore.SizeOf[float32]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float32(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float32(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float32(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float32(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float32(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float32(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float32(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float32(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float32(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float32(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float32(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float32(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float32(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float32(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float32(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float32(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*float32)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = a0 / b0
+		*(*float32)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = a1 / b1
+		*(*float32)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = a2 / b2
+		*(*float32)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = a3 / b3
+		*(*float32)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = a4 / b4
+		*(*float32)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = a5 / b5
+		*(*float32)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = a6 / b6
+		*(*float32)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = a7 / b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float32(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float32(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*float32)(unsafe.Add(dstData, uintptr(i)*dstSize)) = a / b
+	}
 }
 
 /*
@@ -260,7 +619,58 @@ Edge cases:
 func BlazeElementWiseVectorDivideF64[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, newVectorAddr memcore.MarkRaw,
 ) {
-	memstruct.VectorBinaryExecute(vectorAAddr, vectorBAddr, newVectorAddr, func(a T, b U) float64 {
-		return float64(a) / float64(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform elementwise divide: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	dstData := memstruct.VectorDataPtrGet[float64](newVectorAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	dstSize := uintptr(memcore.SizeOf[float64]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*float64)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = a0 / b0
+		*(*float64)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = a1 / b1
+		*(*float64)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = a2 / b2
+		*(*float64)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = a3 / b3
+		*(*float64)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = a4 / b4
+		*(*float64)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = a5 / b5
+		*(*float64)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = a6 / b6
+		*(*float64)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = a7 / b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*float64)(unsafe.Add(dstData, uintptr(i)*dstSize)) = a / b
+	}
 }

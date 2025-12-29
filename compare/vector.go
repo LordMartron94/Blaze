@@ -1,13 +1,14 @@
 package compare
 
 import (
-	"blaze/core"
 	"fmt"
-	"foundation"
 	"math"
+	"sort"
+	"unsafe"
+
+	"foundation"
 	"memcore"
 	"memstruct"
-	"sort"
 )
 
 /*
@@ -41,16 +42,60 @@ Edge cases:
 func BlazeCompareVectorGreaterThanOrEqualTo[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, maskAddr memcore.MarkRaw,
 ) {
-	i := uint64(0)
-	memstruct.VectorBinaryReadOnlyExecute(vectorAAddr, vectorBAddr, func(a T, b U) {
-		if float64(a) >= float64(b) {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, true)
-		} else {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, false)
-		}
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
 
-		i++
-	}, core.BlazeDefaultStride)
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform compare: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	maskData := memstruct.ArrayDataPtrGet[bool](maskAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	maskSize := uintptr(memcore.SizeOf[bool]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*bool)(unsafe.Add(maskData, uintptr(i+0)*maskSize)) = a0 >= b0
+		*(*bool)(unsafe.Add(maskData, uintptr(i+1)*maskSize)) = a1 >= b1
+		*(*bool)(unsafe.Add(maskData, uintptr(i+2)*maskSize)) = a2 >= b2
+		*(*bool)(unsafe.Add(maskData, uintptr(i+3)*maskSize)) = a3 >= b3
+		*(*bool)(unsafe.Add(maskData, uintptr(i+4)*maskSize)) = a4 >= b4
+		*(*bool)(unsafe.Add(maskData, uintptr(i+5)*maskSize)) = a5 >= b5
+		*(*bool)(unsafe.Add(maskData, uintptr(i+6)*maskSize)) = a6 >= b6
+		*(*bool)(unsafe.Add(maskData, uintptr(i+7)*maskSize)) = a7 >= b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*bool)(unsafe.Add(maskData, uintptr(i)*maskSize)) = a >= b
+	}
 }
 
 /*
@@ -84,16 +129,60 @@ Edge cases:
 func BlazeCompareVectorGreaterThan[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, maskAddr memcore.MarkRaw,
 ) {
-	i := uint64(0)
-	memstruct.VectorBinaryReadOnlyExecute(vectorAAddr, vectorBAddr, func(a T, b U) {
-		if float64(a) > float64(b) {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, true)
-		} else {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, false)
-		}
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
 
-		i++
-	}, core.BlazeDefaultStride)
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform compare: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	maskData := memstruct.ArrayDataPtrGet[bool](maskAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	maskSize := uintptr(memcore.SizeOf[bool]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*bool)(unsafe.Add(maskData, uintptr(i+0)*maskSize)) = a0 > b0
+		*(*bool)(unsafe.Add(maskData, uintptr(i+1)*maskSize)) = a1 > b1
+		*(*bool)(unsafe.Add(maskData, uintptr(i+2)*maskSize)) = a2 > b2
+		*(*bool)(unsafe.Add(maskData, uintptr(i+3)*maskSize)) = a3 > b3
+		*(*bool)(unsafe.Add(maskData, uintptr(i+4)*maskSize)) = a4 > b4
+		*(*bool)(unsafe.Add(maskData, uintptr(i+5)*maskSize)) = a5 > b5
+		*(*bool)(unsafe.Add(maskData, uintptr(i+6)*maskSize)) = a6 > b6
+		*(*bool)(unsafe.Add(maskData, uintptr(i+7)*maskSize)) = a7 > b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*bool)(unsafe.Add(maskData, uintptr(i)*maskSize)) = a > b
+	}
 }
 
 /*
@@ -127,16 +216,60 @@ Edge cases:
 func BlazeCompareVectorSmallerThanOrEqualTo[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, maskAddr memcore.MarkRaw,
 ) {
-	i := uint64(0)
-	memstruct.VectorBinaryReadOnlyExecute(vectorAAddr, vectorBAddr, func(a T, b U) {
-		if float64(a) <= float64(b) {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, true)
-		} else {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, false)
-		}
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
 
-		i++
-	}, core.BlazeDefaultStride)
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform compare: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	maskData := memstruct.ArrayDataPtrGet[bool](maskAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	maskSize := uintptr(memcore.SizeOf[bool]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*bool)(unsafe.Add(maskData, uintptr(i+0)*maskSize)) = a0 <= b0
+		*(*bool)(unsafe.Add(maskData, uintptr(i+1)*maskSize)) = a1 <= b1
+		*(*bool)(unsafe.Add(maskData, uintptr(i+2)*maskSize)) = a2 <= b2
+		*(*bool)(unsafe.Add(maskData, uintptr(i+3)*maskSize)) = a3 <= b3
+		*(*bool)(unsafe.Add(maskData, uintptr(i+4)*maskSize)) = a4 <= b4
+		*(*bool)(unsafe.Add(maskData, uintptr(i+5)*maskSize)) = a5 <= b5
+		*(*bool)(unsafe.Add(maskData, uintptr(i+6)*maskSize)) = a6 <= b6
+		*(*bool)(unsafe.Add(maskData, uintptr(i+7)*maskSize)) = a7 <= b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*bool)(unsafe.Add(maskData, uintptr(i)*maskSize)) = a <= b
+	}
 }
 
 /*
@@ -170,16 +303,60 @@ Edge cases:
 func BlazeCompareVectorSmallerThan[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, maskAddr memcore.MarkRaw,
 ) {
-	i := uint64(0)
-	memstruct.VectorBinaryReadOnlyExecute(vectorAAddr, vectorBAddr, func(a T, b U) {
-		if float64(a) < float64(b) {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, true)
-		} else {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, false)
-		}
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
 
-		i++
-	}, core.BlazeDefaultStride)
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform compare: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	maskData := memstruct.ArrayDataPtrGet[bool](maskAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	maskSize := uintptr(memcore.SizeOf[bool]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*bool)(unsafe.Add(maskData, uintptr(i+0)*maskSize)) = a0 < b0
+		*(*bool)(unsafe.Add(maskData, uintptr(i+1)*maskSize)) = a1 < b1
+		*(*bool)(unsafe.Add(maskData, uintptr(i+2)*maskSize)) = a2 < b2
+		*(*bool)(unsafe.Add(maskData, uintptr(i+3)*maskSize)) = a3 < b3
+		*(*bool)(unsafe.Add(maskData, uintptr(i+4)*maskSize)) = a4 < b4
+		*(*bool)(unsafe.Add(maskData, uintptr(i+5)*maskSize)) = a5 < b5
+		*(*bool)(unsafe.Add(maskData, uintptr(i+6)*maskSize)) = a6 < b6
+		*(*bool)(unsafe.Add(maskData, uintptr(i+7)*maskSize)) = a7 < b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*bool)(unsafe.Add(maskData, uintptr(i)*maskSize)) = a < b
+	}
 }
 
 /*
@@ -219,17 +396,60 @@ func BlazeCompareVectorEqualTo[T, U foundation.Numeric](
 	vectorAAddr, vectorBAddr, maskAddr memcore.MarkRaw,
 	tolerance float64,
 ) {
-	i := uint64(0)
-	memstruct.VectorBinaryReadOnlyExecute(vectorAAddr, vectorBAddr, func(a T, b U) {
-		equalEnough := math.Abs(float64(a)-float64(b)) <= tolerance
-		if equalEnough {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, true)
-		} else {
-			memstruct.ArraySetAtUnsafe(maskAddr, i, false)
-		}
+	aCapacity := memstruct.VectorCapacityGet[T](vectorAAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorBAddr)
 
-		i++
-	}, core.BlazeDefaultStride)
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot perform compare: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorAAddr)
+	bData := memstruct.VectorDataPtrGet[U](vectorBAddr)
+	maskData := memstruct.ArrayDataPtrGet[bool](maskAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	maskSize := uintptr(memcore.SizeOf[bool]())
+	capacity := aCapacity
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		*(*bool)(unsafe.Add(maskData, uintptr(i+0)*maskSize)) = math.Abs(a0-b0) <= tolerance
+		*(*bool)(unsafe.Add(maskData, uintptr(i+1)*maskSize)) = math.Abs(a1-b1) <= tolerance
+		*(*bool)(unsafe.Add(maskData, uintptr(i+2)*maskSize)) = math.Abs(a2-b2) <= tolerance
+		*(*bool)(unsafe.Add(maskData, uintptr(i+3)*maskSize)) = math.Abs(a3-b3) <= tolerance
+		*(*bool)(unsafe.Add(maskData, uintptr(i+4)*maskSize)) = math.Abs(a4-b4) <= tolerance
+		*(*bool)(unsafe.Add(maskData, uintptr(i+5)*maskSize)) = math.Abs(a5-b5) <= tolerance
+		*(*bool)(unsafe.Add(maskData, uintptr(i+6)*maskSize)) = math.Abs(a6-b6) <= tolerance
+		*(*bool)(unsafe.Add(maskData, uintptr(i+7)*maskSize)) = math.Abs(a7-b7) <= tolerance
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		*(*bool)(unsafe.Add(maskData, uintptr(i)*maskSize)) = math.Abs(a-b) <= tolerance
+	}
 }
 
 type weightedValue struct {

@@ -1,7 +1,9 @@
 package reduce
 
 import (
-	"blaze/core"
+	"fmt"
+	"unsafe"
+
 	"foundation"
 	"memcore"
 	"memstruct"
@@ -31,13 +33,57 @@ Edge cases:
 - No type conversions (returns same type as input)
 */
 func BlazeReduceVectorMin[T foundation.Numeric](vector memcore.MarkRaw) T {
-	minValue := foundation.MaxValue[T]()
+	data := memstruct.VectorDataPtrGet[T](vector)
+	size := uintptr(memcore.SizeOf[T]())
+	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	memstruct.VectorUnaryReadOnlyExecute(vector, func(item T) {
-		if item < minValue {
-			minValue = item
+	minValue := foundation.MaxValue[T]()
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := *(*T)(unsafe.Add(data, uintptr(i+0)*size))
+		v1 := *(*T)(unsafe.Add(data, uintptr(i+1)*size))
+		v2 := *(*T)(unsafe.Add(data, uintptr(i+2)*size))
+		v3 := *(*T)(unsafe.Add(data, uintptr(i+3)*size))
+		v4 := *(*T)(unsafe.Add(data, uintptr(i+4)*size))
+		v5 := *(*T)(unsafe.Add(data, uintptr(i+5)*size))
+		v6 := *(*T)(unsafe.Add(data, uintptr(i+6)*size))
+		v7 := *(*T)(unsafe.Add(data, uintptr(i+7)*size))
+
+		if v0 < minValue {
+			minValue = v0
 		}
-	}, core.BlazeDefaultStride)
+		if v1 < minValue {
+			minValue = v1
+		}
+		if v2 < minValue {
+			minValue = v2
+		}
+		if v3 < minValue {
+			minValue = v3
+		}
+		if v4 < minValue {
+			minValue = v4
+		}
+		if v5 < minValue {
+			minValue = v5
+		}
+		if v6 < minValue {
+			minValue = v6
+		}
+		if v7 < minValue {
+			minValue = v7
+		}
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := *(*T)(unsafe.Add(data, uintptr(i)*size))
+		if v < minValue {
+			minValue = v
+		}
+	}
 
 	return minValue
 }
@@ -66,13 +112,57 @@ Edge cases:
 - No type conversions (returns same type as input)
 */
 func BlazeReduceVectorMax[T foundation.Numeric](vector memcore.MarkRaw) T {
-	maxValue := foundation.MinValue[T]()
+	data := memstruct.VectorDataPtrGet[T](vector)
+	size := uintptr(memcore.SizeOf[T]())
+	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	memstruct.VectorUnaryReadOnlyExecute(vector, func(item T) {
-		if item > maxValue {
-			maxValue = item
+	maxValue := foundation.MinValue[T]()
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := *(*T)(unsafe.Add(data, uintptr(i+0)*size))
+		v1 := *(*T)(unsafe.Add(data, uintptr(i+1)*size))
+		v2 := *(*T)(unsafe.Add(data, uintptr(i+2)*size))
+		v3 := *(*T)(unsafe.Add(data, uintptr(i+3)*size))
+		v4 := *(*T)(unsafe.Add(data, uintptr(i+4)*size))
+		v5 := *(*T)(unsafe.Add(data, uintptr(i+5)*size))
+		v6 := *(*T)(unsafe.Add(data, uintptr(i+6)*size))
+		v7 := *(*T)(unsafe.Add(data, uintptr(i+7)*size))
+
+		if v0 > maxValue {
+			maxValue = v0
 		}
-	}, core.BlazeDefaultStride)
+		if v1 > maxValue {
+			maxValue = v1
+		}
+		if v2 > maxValue {
+			maxValue = v2
+		}
+		if v3 > maxValue {
+			maxValue = v3
+		}
+		if v4 > maxValue {
+			maxValue = v4
+		}
+		if v5 > maxValue {
+			maxValue = v5
+		}
+		if v6 > maxValue {
+			maxValue = v6
+		}
+		if v7 > maxValue {
+			maxValue = v7
+		}
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := *(*T)(unsafe.Add(data, uintptr(i)*size))
+		if v > maxValue {
+			maxValue = v
+		}
+	}
 
 	return maxValue
 }
@@ -102,18 +192,85 @@ Edge cases:
 - No type conversions (returns same type as input)
 */
 func BlazeReduceVectorMinMax[T foundation.Numeric](vector memcore.MarkRaw) (min T, max T) {
+	data := memstruct.VectorDataPtrGet[T](vector)
+	size := uintptr(memcore.SizeOf[T]())
+	capacity := memstruct.VectorCapacityGet[T](vector)
+
 	minValue := foundation.MaxValue[T]()
 	maxValue := foundation.MinValue[T]()
+	var i uint64
 
-	memstruct.VectorUnaryReadOnlyExecute(vector, func(item T) {
-		if item < minValue {
-			minValue = item
-		}
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := *(*T)(unsafe.Add(data, uintptr(i+0)*size))
+		v1 := *(*T)(unsafe.Add(data, uintptr(i+1)*size))
+		v2 := *(*T)(unsafe.Add(data, uintptr(i+2)*size))
+		v3 := *(*T)(unsafe.Add(data, uintptr(i+3)*size))
+		v4 := *(*T)(unsafe.Add(data, uintptr(i+4)*size))
+		v5 := *(*T)(unsafe.Add(data, uintptr(i+5)*size))
+		v6 := *(*T)(unsafe.Add(data, uintptr(i+6)*size))
+		v7 := *(*T)(unsafe.Add(data, uintptr(i+7)*size))
 
-		if item > maxValue {
-			maxValue = item
+		if v0 < minValue {
+			minValue = v0
 		}
-	}, core.BlazeDefaultStride)
+		if v0 > maxValue {
+			maxValue = v0
+		}
+		if v1 < minValue {
+			minValue = v1
+		}
+		if v1 > maxValue {
+			maxValue = v1
+		}
+		if v2 < minValue {
+			minValue = v2
+		}
+		if v2 > maxValue {
+			maxValue = v2
+		}
+		if v3 < minValue {
+			minValue = v3
+		}
+		if v3 > maxValue {
+			maxValue = v3
+		}
+		if v4 < minValue {
+			minValue = v4
+		}
+		if v4 > maxValue {
+			maxValue = v4
+		}
+		if v5 < minValue {
+			minValue = v5
+		}
+		if v5 > maxValue {
+			maxValue = v5
+		}
+		if v6 < minValue {
+			minValue = v6
+		}
+		if v6 > maxValue {
+			maxValue = v6
+		}
+		if v7 < minValue {
+			minValue = v7
+		}
+		if v7 > maxValue {
+			maxValue = v7
+		}
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := *(*T)(unsafe.Add(data, uintptr(i)*size))
+		if v < minValue {
+			minValue = v
+		}
+		if v > maxValue {
+			maxValue = v
+		}
+	}
 
 	return minValue, maxValue
 }
@@ -143,11 +300,32 @@ Edge cases:
 - No overflow checking (relies on Go's numeric behavior)
 */
 func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw) float32 {
-	sum := float32(0)
+	data := memstruct.VectorDataPtrGet[T](vector)
+	size := uintptr(memcore.SizeOf[T]())
+	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	memstruct.VectorUnaryReadOnlyExecute(vector, func(a T) {
-		sum += float32(a)
-	}, core.BlazeDefaultStride)
+	var sum float32
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := float32(*(*T)(unsafe.Add(data, uintptr(i+0)*size)))
+		v1 := float32(*(*T)(unsafe.Add(data, uintptr(i+1)*size)))
+		v2 := float32(*(*T)(unsafe.Add(data, uintptr(i+2)*size)))
+		v3 := float32(*(*T)(unsafe.Add(data, uintptr(i+3)*size)))
+		v4 := float32(*(*T)(unsafe.Add(data, uintptr(i+4)*size)))
+		v5 := float32(*(*T)(unsafe.Add(data, uintptr(i+5)*size)))
+		v6 := float32(*(*T)(unsafe.Add(data, uintptr(i+6)*size)))
+		v7 := float32(*(*T)(unsafe.Add(data, uintptr(i+7)*size)))
+
+		sum += v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := float32(*(*T)(unsafe.Add(data, uintptr(i)*size)))
+		sum += v
+	}
 
 	return sum
 }
@@ -177,11 +355,32 @@ Edge cases:
 - No overflow checking (relies on Go's numeric behavior)
 */
 func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw) float64 {
-	sum := float64(0)
+	data := memstruct.VectorDataPtrGet[T](vector)
+	size := uintptr(memcore.SizeOf[T]())
+	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	memstruct.VectorUnaryReadOnlyExecute(vector, func(a T) {
-		sum += float64(a)
-	}, core.BlazeDefaultStride)
+	var sum float64
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := float64(*(*T)(unsafe.Add(data, uintptr(i+0)*size)))
+		v1 := float64(*(*T)(unsafe.Add(data, uintptr(i+1)*size)))
+		v2 := float64(*(*T)(unsafe.Add(data, uintptr(i+2)*size)))
+		v3 := float64(*(*T)(unsafe.Add(data, uintptr(i+3)*size)))
+		v4 := float64(*(*T)(unsafe.Add(data, uintptr(i+4)*size)))
+		v5 := float64(*(*T)(unsafe.Add(data, uintptr(i+5)*size)))
+		v6 := float64(*(*T)(unsafe.Add(data, uintptr(i+6)*size)))
+		v7 := float64(*(*T)(unsafe.Add(data, uintptr(i+7)*size)))
+
+		sum += v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := float64(*(*T)(unsafe.Add(data, uintptr(i)*size)))
+		sum += v
+	}
 
 	return sum
 }
@@ -211,11 +410,32 @@ Edge cases:
 - No overflow checking (relies on Go's numeric behavior)
 */
 func BlazeReduceVectorSumSquaredF32[T foundation.Numeric](vector memcore.MarkRaw) float32 {
-	sqrSum := float32(0)
+	data := memstruct.VectorDataPtrGet[T](vector)
+	size := uintptr(memcore.SizeOf[T]())
+	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	memstruct.VectorUnaryReadOnlyExecute(vector, func(a T) {
-		sqrSum += float32(a) * float32(a)
-	}, core.BlazeDefaultStride)
+	var sqrSum float32
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := float32(*(*T)(unsafe.Add(data, uintptr(i+0)*size)))
+		v1 := float32(*(*T)(unsafe.Add(data, uintptr(i+1)*size)))
+		v2 := float32(*(*T)(unsafe.Add(data, uintptr(i+2)*size)))
+		v3 := float32(*(*T)(unsafe.Add(data, uintptr(i+3)*size)))
+		v4 := float32(*(*T)(unsafe.Add(data, uintptr(i+4)*size)))
+		v5 := float32(*(*T)(unsafe.Add(data, uintptr(i+5)*size)))
+		v6 := float32(*(*T)(unsafe.Add(data, uintptr(i+6)*size)))
+		v7 := float32(*(*T)(unsafe.Add(data, uintptr(i+7)*size)))
+
+		sqrSum += v0*v0 + v1*v1 + v2*v2 + v3*v3 + v4*v4 + v5*v5 + v6*v6 + v7*v7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := float32(*(*T)(unsafe.Add(data, uintptr(i)*size)))
+		sqrSum += v * v
+	}
 
 	return sqrSum
 }
@@ -245,11 +465,32 @@ Edge cases:
 - No overflow checking (relies on Go's numeric behavior)
 */
 func BlazeReduceVectorSumSquaredF64[T foundation.Numeric](vector memcore.MarkRaw) float64 {
-	sqrSum := float64(0)
+	data := memstruct.VectorDataPtrGet[T](vector)
+	size := uintptr(memcore.SizeOf[T]())
+	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	memstruct.VectorUnaryReadOnlyExecute(vector, func(a T) {
-		sqrSum += float64(a) * float64(a)
-	}, core.BlazeDefaultStride)
+	var sqrSum float64
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := float64(*(*T)(unsafe.Add(data, uintptr(i+0)*size)))
+		v1 := float64(*(*T)(unsafe.Add(data, uintptr(i+1)*size)))
+		v2 := float64(*(*T)(unsafe.Add(data, uintptr(i+2)*size)))
+		v3 := float64(*(*T)(unsafe.Add(data, uintptr(i+3)*size)))
+		v4 := float64(*(*T)(unsafe.Add(data, uintptr(i+4)*size)))
+		v5 := float64(*(*T)(unsafe.Add(data, uintptr(i+5)*size)))
+		v6 := float64(*(*T)(unsafe.Add(data, uintptr(i+6)*size)))
+		v7 := float64(*(*T)(unsafe.Add(data, uintptr(i+7)*size)))
+
+		sqrSum += v0*v0 + v1*v1 + v2*v2 + v3*v3 + v4*v4 + v5*v5 + v6*v6 + v7*v7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := float64(*(*T)(unsafe.Add(data, uintptr(i)*size)))
+		sqrSum += v * v
+	}
 
 	return sqrSum
 }
@@ -283,10 +524,53 @@ Edge cases:
 - No overflow checking (relies on Go's numeric behavior)
 */
 func BlazeReduceDotProductF32[T, U foundation.Numeric](aAddr, bAddr memcore.MarkRaw) float32 {
-	dot := float32(0)
-	memstruct.VectorBinaryReadOnlyExecute(aAddr, bAddr, func(a T, b U) {
-		dot += float32(a) * float32(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](aAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](bAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot compute dot product: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](aAddr)
+	bData := memstruct.VectorDataPtrGet[U](bAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	capacity := aCapacity
+
+	var dot float32
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float32(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float32(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float32(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float32(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float32(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float32(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float32(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float32(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float32(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float32(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float32(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float32(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float32(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float32(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float32(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float32(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		dot += a0*b0 + a1*b1 + a2*b2 + a3*b3 + a4*b4 + a5*b5 + a6*b6 + a7*b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float32(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float32(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		dot += a * b
+	}
+
 	return dot
 }
 
@@ -319,10 +603,53 @@ Edge cases:
 - No overflow checking (relies on Go's numeric behavior)
 */
 func BlazeReduceDotProductF64[T, U foundation.Numeric](aAddr, bAddr memcore.MarkRaw) float64 {
-	dot := float64(0)
-	memstruct.VectorBinaryReadOnlyExecute(aAddr, bAddr, func(a T, b U) {
-		dot += float64(a) * float64(b)
-	}, core.BlazeDefaultStride)
+	aCapacity := memstruct.VectorCapacityGet[T](aAddr)
+	bCapacity := memstruct.VectorCapacityGet[U](bAddr)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot compute dot product: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](aAddr)
+	bData := memstruct.VectorDataPtrGet[U](bAddr)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	capacity := aCapacity
+
+	var dot float64
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
+
+		dot += a0*b0 + a1*b1 + a2*b2 + a3*b3 + a4*b4 + a5*b5 + a6*b6 + a7*b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
+		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
+		dot += a * b
+	}
+
 	return dot
 }
 
@@ -431,12 +758,53 @@ func BlazeReduceCovarianceF32[T, U foundation.Numeric](
 	meanA float32,
 	meanB float32,
 ) float32 {
-	var covariance float32 = 0
-	memstruct.VectorBinaryReadOnlyExecute(vectorA, vectorB, func(a T, b U) {
-		devA := float32(a) - meanA
-		devB := float32(b) - meanB
+	aCapacity := memstruct.VectorCapacityGet[T](vectorA)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorB)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot compute covariance: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorA)
+	bData := memstruct.VectorDataPtrGet[U](vectorB)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	capacity := aCapacity
+
+	var covariance float32
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float32(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize))) - meanA
+		a1 := float32(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize))) - meanA
+		a2 := float32(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize))) - meanA
+		a3 := float32(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize))) - meanA
+		a4 := float32(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize))) - meanA
+		a5 := float32(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize))) - meanA
+		a6 := float32(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize))) - meanA
+		a7 := float32(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize))) - meanA
+
+		b0 := float32(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize))) - meanB
+		b1 := float32(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize))) - meanB
+		b2 := float32(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize))) - meanB
+		b3 := float32(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize))) - meanB
+		b4 := float32(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize))) - meanB
+		b5 := float32(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize))) - meanB
+		b6 := float32(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize))) - meanB
+		b7 := float32(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize))) - meanB
+
+		covariance += a0*b0 + a1*b1 + a2*b2 + a3*b3 + a4*b4 + a5*b5 + a6*b6 + a7*b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		devA := float32(*(*T)(unsafe.Add(aData, uintptr(i)*aSize))) - meanA
+		devB := float32(*(*U)(unsafe.Add(bData, uintptr(i)*bSize))) - meanB
 		covariance += devA * devB
-	}, core.BlazeDefaultStride)
+	}
+
 	return covariance
 }
 
@@ -479,11 +847,52 @@ func BlazeReduceCovarianceF64[T, U foundation.Numeric](
 	meanA float64,
 	meanB float64,
 ) float64 {
-	var covariance float64 = 0
-	memstruct.VectorBinaryReadOnlyExecute(vectorA, vectorB, func(a T, b U) {
-		devA := float64(a) - meanA
-		devB := float64(b) - meanB
+	aCapacity := memstruct.VectorCapacityGet[T](vectorA)
+	bCapacity := memstruct.VectorCapacityGet[U](vectorB)
+
+	if aCapacity != bCapacity {
+		panic(fmt.Errorf("cannot compute covariance: capacity mismatch (a=%d, b=%d)",
+			aCapacity, bCapacity))
+	}
+
+	aData := memstruct.VectorDataPtrGet[T](vectorA)
+	bData := memstruct.VectorDataPtrGet[U](vectorB)
+	aSize := uintptr(memcore.SizeOf[T]())
+	bSize := uintptr(memcore.SizeOf[U]())
+	capacity := aCapacity
+
+	var covariance float64
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize))) - meanA
+		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize))) - meanA
+		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize))) - meanA
+		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize))) - meanA
+		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize))) - meanA
+		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize))) - meanA
+		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize))) - meanA
+		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize))) - meanA
+
+		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize))) - meanB
+		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize))) - meanB
+		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize))) - meanB
+		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize))) - meanB
+		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize))) - meanB
+		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize))) - meanB
+		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize))) - meanB
+		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize))) - meanB
+
+		covariance += a0*b0 + a1*b1 + a2*b2 + a3*b3 + a4*b4 + a5*b5 + a6*b6 + a7*b7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		devA := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize))) - meanA
+		devB := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize))) - meanB
 		covariance += devA * devB
-	}, core.BlazeDefaultStride)
+	}
+
 	return covariance
 }

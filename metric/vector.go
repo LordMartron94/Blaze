@@ -1,7 +1,8 @@
 package metric
 
 import (
-	"blaze/core"
+	"unsafe"
+
 	"blaze/reduce"
 	"foundation"
 	"memcore"
@@ -106,10 +107,42 @@ func BlazeMetricVectorNormalizedF32[T foundation.Numeric](
 	newVectorAddr memcore.MarkRaw,
 ) {
 	magnitude := BlazeMetricVectorMagnitudeF32[T](currentVector)
-	inv := 1.0 / magnitude
-	memstruct.VectorUnaryExecute(currentVector, newVectorAddr, func(a T) float32 {
-		return float32(a) * inv
-	}, core.BlazeDefaultStride)
+	inv := float32(1.0 / magnitude)
+
+	srcData := memstruct.VectorDataPtrGet[T](currentVector)
+	dstData := memstruct.VectorDataPtrGet[float32](newVectorAddr)
+	srcSize := uintptr(memcore.SizeOf[T]())
+	dstSize := uintptr(memcore.SizeOf[float32]())
+	capacity := memstruct.VectorCapacityGet[T](currentVector)
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := float32(*(*T)(unsafe.Add(srcData, uintptr(i+0)*srcSize))) * inv
+		v1 := float32(*(*T)(unsafe.Add(srcData, uintptr(i+1)*srcSize))) * inv
+		v2 := float32(*(*T)(unsafe.Add(srcData, uintptr(i+2)*srcSize))) * inv
+		v3 := float32(*(*T)(unsafe.Add(srcData, uintptr(i+3)*srcSize))) * inv
+		v4 := float32(*(*T)(unsafe.Add(srcData, uintptr(i+4)*srcSize))) * inv
+		v5 := float32(*(*T)(unsafe.Add(srcData, uintptr(i+5)*srcSize))) * inv
+		v6 := float32(*(*T)(unsafe.Add(srcData, uintptr(i+6)*srcSize))) * inv
+		v7 := float32(*(*T)(unsafe.Add(srcData, uintptr(i+7)*srcSize))) * inv
+
+		*(*float32)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = v0
+		*(*float32)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = v1
+		*(*float32)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = v2
+		*(*float32)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = v3
+		*(*float32)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = v4
+		*(*float32)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = v5
+		*(*float32)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = v6
+		*(*float32)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = v7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := float32(*(*T)(unsafe.Add(srcData, uintptr(i)*srcSize))) * inv
+		*(*float32)(unsafe.Add(dstData, uintptr(i)*dstSize)) = v
+	}
 }
 
 /*
@@ -148,7 +181,39 @@ func BlazeMetricVectorNormalizedF64[T foundation.Numeric](
 ) {
 	magnitude := BlazeMetricVectorMagnitudeF64[T](currentVector)
 	inv := 1.0 / magnitude
-	memstruct.VectorUnaryExecute(currentVector, newVectorAddr, func(a T) float64 {
-		return float64(a) * inv
-	}, core.BlazeDefaultStride)
+
+	srcData := memstruct.VectorDataPtrGet[T](currentVector)
+	dstData := memstruct.VectorDataPtrGet[float64](newVectorAddr)
+	srcSize := uintptr(memcore.SizeOf[T]())
+	dstSize := uintptr(memcore.SizeOf[float64]())
+	capacity := memstruct.VectorCapacityGet[T](currentVector)
+
+	var i uint64
+
+	// Manually unrolled loop for stride 8
+	for ; i+7 < capacity; i += 8 {
+		v0 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+0)*srcSize))) * inv
+		v1 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+1)*srcSize))) * inv
+		v2 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+2)*srcSize))) * inv
+		v3 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+3)*srcSize))) * inv
+		v4 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+4)*srcSize))) * inv
+		v5 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+5)*srcSize))) * inv
+		v6 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+6)*srcSize))) * inv
+		v7 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+7)*srcSize))) * inv
+
+		*(*float64)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = v0
+		*(*float64)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = v1
+		*(*float64)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = v2
+		*(*float64)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = v3
+		*(*float64)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = v4
+		*(*float64)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = v5
+		*(*float64)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = v6
+		*(*float64)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = v7
+	}
+
+	// Handle remaining elements
+	for ; i < capacity; i++ {
+		v := float64(*(*T)(unsafe.Add(srcData, uintptr(i)*srcSize))) * inv
+		*(*float64)(unsafe.Add(dstData, uintptr(i)*dstSize)) = v
+	}
 }
