@@ -8,6 +8,8 @@ import (
 )
 
 func init() {
+
+	// F64->F64
 	internal.Register(internal.KernelManifest{
 		// ---- Identity ----
 		Op:     core.Blaze_Operation_Vector_Sum,
@@ -18,16 +20,36 @@ func init() {
 		Func: VectorSumF64iF64o__AVX2,
 
 		// ---- Constraints ----
-		RequiredISA: internal.ISA_AVX2,
-
-		// Explicitly require the input buffer to be 32-byte aligned.
-		RequiredFlags: internal.Flag_Aligned32,
+		RequiredISA:   internal.ISA_AVX2,
+		RequiredFlags: internal.Flag_Aligned32 | internal.Flag_Contiguous,
 
 		// ---- Strategy ----
 		Priority: 20,
-		MinN:     0,
+		MinN:     2048, // ASM only improves on Go performance when vectors become really big.
+	})
+
+	// F32->F64
+	internal.Register(internal.KernelManifest{
+		// ---- Identity ----
+		Op:     core.Blaze_Operation_Vector_Sum,
+		Inputs: []core.BlazeDType{core.DTypeF32},
+		Output: core.DTypeF64,
+
+		// ---- Implementation ----
+		Func: VectorSumF32iF64o__AVX2,
+
+		// ---- Constraints ----
+		RequiredISA:   internal.ISA_AVX2,
+		RequiredFlags: internal.Flag_Aligned32 | internal.Flag_Contiguous,
+
+		// ---- Strategy ----
+		Priority: 20,
+		MinN:     512, // ASM improves on Go performance a lot sooner due to conversions happening inside the Go fallback.
 	})
 }
 
 //go:noescape
 func VectorSumF64iF64o__AVX2(frame *internal.BlazeKernelFrame)
+
+//go:noescape
+func VectorSumF32iF64o__AVX2(frame *internal.BlazeKernelFrame)

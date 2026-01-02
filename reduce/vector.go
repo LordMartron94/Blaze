@@ -410,6 +410,30 @@ func blazeReduceVectorSumF64Go[T foundation.Numeric](
 	var sum0, sum1 float64
 	var i uint64
 
+	// Optimize for contiguous memory: use direct pointer arithmetic
+	if (frame.Flags & internal.Flag_Contiguous) != 0 {
+		elementSize := uintptr(memcore.SizeOf[T]())
+
+		for ; i+7 < n; i += 8 {
+			sum0 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+0)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+1)*elementSize)))
+			sum1 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+2)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+3)*elementSize)))
+			sum0 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+4)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+5)*elementSize)))
+			sum1 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+6)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+7)*elementSize)))
+		}
+
+		finalSum := sum0 + sum1
+
+		for ; i < n; i++ {
+			finalSum += float64(*(*T)(unsafe.Add(baseP, uintptr(i)*elementSize)))
+		}
+
+		if frame.Returns[0] != nil {
+			*(*float64)(frame.Returns[0]) = finalSum
+		}
+		return
+	}
+
+	// Fallback: stride-based access for non-contiguous memory
 	for ; i+7 < n; i += 8 {
 		p0 := uintptr(int64(i+0) * stride)
 		p1 := uintptr(int64(i+1) * stride)
