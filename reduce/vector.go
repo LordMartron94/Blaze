@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"unsafe"
 
+	"blaze/core"
+	"blaze/internal"
 	"blaze/simd"
 	"foundation"
 	"memcore"
@@ -305,13 +307,7 @@ func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw) float
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	// Vectors are always contiguous (stride == element size)
-	isContiguous := true
-
-	return simd.BlazeReduceVectorSumF32Dispatch(
-		unsafe.Pointer(data), size, capacity, isContiguous,
-		blazeReduceVectorSumF32Go[T],
-	)
+	return blazeReduceVectorSumF32Go[T](data, size, capacity)
 }
 
 //go:inline
@@ -344,6 +340,13 @@ func blazeReduceVectorSumF32Go[T foundation.Numeric](
 	return sum
 }
 
+var sumResult *float64
+
+func init() {
+	initRV := 0.0
+	sumResult = &initRV
+}
+
 /*
 BlazeReduceVectorSumF64 computes the sum of all vector elements in float64 precision.
 
@@ -370,46 +373,69 @@ Edge cases:
 */
 func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw) float64 {
 	data := memstruct.VectorDataPtrGet[T](vector)
-	size := uintptr(memcore.SizeOf[T]())
-	capacity := memstruct.VectorCapacityGet[T](vector)
+	n := memstruct.VectorCapacityGet[T](vector)
+	*sumResult = 0.0
 
-	// Vectors are always contiguous (stride == element size)
-	isContiguous := true
+	frame := internal.CurrentKernelFrame
+	frame.Reset().
+		WithDim(n, 0, 0).
+		WithBuffer(0, data, int64(memcore.SizeOf[T]())).
+		WithReturn(0, unsafe.Pointer(sumResult)).
+		WithFlags(internal.Flag_Contiguous)
 
-	return simd.BlazeReduceVectorSumF64Dispatch(
-		unsafe.Pointer(data), size, capacity, isContiguous,
-		blazeReduceVectorSumF64Go[T],
-	)
+	if memcore.IsAligned(data, 32) {
+		frame.Flags |= internal.Flag_Aligned32
+	}
+
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_Vector_Sum, frame, core.DTypeF64, core.BlazeDTypeGet[T]()) {
+		blazeReduceVectorSumF64Go[T](frame)
+	}
+
+	return *sumResult
 }
 
 //go:inline
 func blazeReduceVectorSumF64Go[T foundation.Numeric](
-	data unsafe.Pointer, size uintptr, capacity uint64,
-) float64 {
-	var sum float64
+	frame *internal.BlazeKernelFrame,
+) {
+	n := frame.Dim[0]
+	if n == 0 {
+		return
+	}
+
+	ptr := frame.Buffers[0].Ptr
+	baseP := unsafe.Pointer(ptr)
+	stride := frame.Buffers[0].Stride
+
+	var sum0, sum1 float64
 	var i uint64
 
-	// Manually unrolled loop for stride 8
-	for ; i+7 < capacity; i += 8 {
-		v0 := float64(*(*T)(unsafe.Add(data, uintptr(i+0)*size)))
-		v1 := float64(*(*T)(unsafe.Add(data, uintptr(i+1)*size)))
-		v2 := float64(*(*T)(unsafe.Add(data, uintptr(i+2)*size)))
-		v3 := float64(*(*T)(unsafe.Add(data, uintptr(i+3)*size)))
-		v4 := float64(*(*T)(unsafe.Add(data, uintptr(i+4)*size)))
-		v5 := float64(*(*T)(unsafe.Add(data, uintptr(i+5)*size)))
-		v6 := float64(*(*T)(unsafe.Add(data, uintptr(i+6)*size)))
-		v7 := float64(*(*T)(unsafe.Add(data, uintptr(i+7)*size)))
+	for ; i+7 < n; i += 8 {
+		p0 := uintptr(int64(i+0) * stride)
+		p1 := uintptr(int64(i+1) * stride)
+		p2 := uintptr(int64(i+2) * stride)
+		p3 := uintptr(int64(i+3) * stride)
+		p4 := uintptr(int64(i+4) * stride)
+		p5 := uintptr(int64(i+5) * stride)
+		p6 := uintptr(int64(i+6) * stride)
+		p7 := uintptr(int64(i+7) * stride)
 
-		sum += v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7
+		sum0 += float64(*(*T)(unsafe.Add(baseP, p0))) + float64(*(*T)(unsafe.Add(baseP, p1)))
+		sum1 += float64(*(*T)(unsafe.Add(baseP, p2))) + float64(*(*T)(unsafe.Add(baseP, p3)))
+		sum0 += float64(*(*T)(unsafe.Add(baseP, p4))) + float64(*(*T)(unsafe.Add(baseP, p5)))
+		sum1 += float64(*(*T)(unsafe.Add(baseP, p6))) + float64(*(*T)(unsafe.Add(baseP, p7)))
 	}
 
-	// Handle remaining elements
-	for ; i < capacity; i++ {
-		v := float64(*(*T)(unsafe.Add(data, uintptr(i)*size)))
-		sum += v
+	finalSum := sum0 + sum1
+
+	for ; i < n; i++ {
+		offset := uintptr(int64(i) * stride)
+		finalSum += float64(*(*T)(unsafe.Add(baseP, offset)))
 	}
 
-	return sum
+	if frame.Returns[0] != nil {
+		*(*float64)(frame.Returns[0]) = finalSum
+	}
 }
 
 /*
@@ -441,13 +467,7 @@ func BlazeReduceVectorSumSquaredF32[T foundation.Numeric](vector memcore.MarkRaw
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	// Vectors are always contiguous (stride == element size)
-	isContiguous := true
-
-	return simd.BlazeReduceVectorSumSquaredF32Dispatch(
-		unsafe.Pointer(data), size, capacity, isContiguous,
-		blazeReduceVectorSumSquaredF32Go[T],
-	)
+	return blazeReduceVectorSumSquaredF32Go[T](data, size, capacity)
 }
 
 //go:inline
@@ -509,14 +529,7 @@ func BlazeReduceVectorSumSquaredF64[T foundation.Numeric](vector memcore.MarkRaw
 	size := uintptr(memcore.SizeOf[T]())
 	capacity := memstruct.VectorCapacityGet[T](vector)
 
-	// Contiguity depends on element type T, not output precision
-	// Data is contiguous when stride equals element size
-	isContiguous := true // Vectors are always contiguous (stride == element size)
-
-	return simd.BlazeReduceVectorSumSquaredF64Dispatch(
-		unsafe.Pointer(data), size, capacity, isContiguous,
-		blazeReduceVectorSumSquaredF64Go[T],
-	)
+	return blazeReduceVectorSumSquaredF64Go[T](data, size, capacity)
 }
 
 //go:inline
@@ -592,15 +605,7 @@ func BlazeReduceDotProductF32[T, U foundation.Numeric](aAddr, bAddr memcore.Mark
 	bSize := uintptr(memcore.SizeOf[U]())
 	capacity := aCapacity
 
-	// Vectors are always contiguous (stride == element size)
-	aIsContiguous := true
-	bIsContiguous := true
-
-	return simd.BlazeReduceDotProductF32Dispatch(
-		unsafe.Pointer(aData), unsafe.Pointer(bData), aSize, bSize, capacity,
-		aIsContiguous, bIsContiguous,
-		blazeReduceDotProductF32Go[T, U],
-	)
+	return blazeReduceDotProductF32Go[T, U](aData, bData, aSize, bSize, capacity)
 }
 
 //go:inline
@@ -686,15 +691,7 @@ func BlazeReduceDotProductF64[T, U foundation.Numeric](aAddr, bAddr memcore.Mark
 	bSize := uintptr(memcore.SizeOf[U]())
 	capacity := aCapacity
 
-	// Vectors are always contiguous (stride == element size)
-	aIsContiguous := true
-	bIsContiguous := true
-
-	return simd.BlazeReduceDotProductF64Dispatch(
-		unsafe.Pointer(aData), unsafe.Pointer(bData), aSize, bSize, capacity,
-		aIsContiguous, bIsContiguous,
-		blazeReduceDotProductF64Go[T, U],
-	)
+	return blazeReduceDotProductF64Go[T, U](aData, bData, aSize, bSize, capacity)
 }
 
 //go:inline

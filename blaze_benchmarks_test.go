@@ -1,13 +1,12 @@
 package blaze
 
 import (
-	"blaze/metric"
+	"blaze/core"
 	"blaze/reduce"
-	"blaze/scalar"
+	"blaze/simd"
+	blazetesting "blaze/testing"
 	"fmt"
-	"foundation"
 	"foundation/benchmarking"
-	"math"
 	"math/rand"
 	"memarch"
 	"memcore"
@@ -17,204 +16,105 @@ import (
 	"testing"
 )
 
-func doubleGrowth(currentCap, needed uint64) uint64 {
-	newSize := currentCap * 2
-	if newSize < needed {
-		newSize = needed
-	}
+func BenchmarkVectorSum(b *testing.B) {
+	// 1. Initialize the library once for the entire benchmark suite
+	simd.BlazeSIMDDispatchInit()
 
-	if newSize > uint64(1*memcore.GigaByte) {
-		panic("way too much memory for a simple test")
-	}
+	dimensions := []uint64{128, 384, 768, 1024, 100_000, 1_000_000}
+	methods := []string{"Go", "Asm"}
 
-	return newSize
-}
+	for _, method := range methods {
+		for _, dimension := range dimensions {
+			b.Run(fmt.Sprintf("Dimension=%d/Method=%s", dimension, method), func(b *testing.B) {
 
-var growthFnID memcore.FunctionID = memcore.MemcoreFunctionRegisterTyped[memforge.GrowthStrategy](doubleGrowth)
+				type benchData struct {
+					vector    memcore.MarkRaw
+					oldGC     int
+					allocator memcore.MarkRaw
+					restore   func()
+				}
 
-// ────────────────────────────────────────────────────────────────
-//   HELPERS
-// ────────────────────────────────────────────────────────────────
+				benchmarking.BenchmarkWithMetrics(b,
+					// --- SETUP Phase ---
+					func(b *testing.B) benchData {
+						oldGC := debug.SetGCPercent(-1)
+						rng := rand.New(rand.NewSource(42))
 
-func fillVectorRandom[T foundation.Numeric](mark memcore.MarkRaw, scale float64) {
-	rnd := rand.New(rand.NewSource(42))
-	for i := uint64(0); i < memstruct.VectorCapacityGet[T](mark); i++ {
-		val := T(rnd.Float64() * scale)
-		memstruct.VectorSetAtUnsafe(mark, i, val)
-	}
-}
+						// Use a larger initial capacity to avoid reallocations during setup
+						allocator := memforge.DynamicLinearAllocatorCreateFunction(
+							uint64(dimension*8+1024),
+							blazetesting.DoubleGrowth,
+						)
 
-// ────────────────────────────────────────────────────────────────
-//   MAIN SUITE
-// ────────────────────────────────────────────────────────────────
+						vector, _ := memarch.MemArchVectorCreate[float64](
+							func(sizeBytes, alignment uint64) memcore.MarkRaw {
+								return memforge.DynamicLinearAllocatorMallocUnsafe(
+									allocator,
+									sizeBytes,
+									alignment,
+								)
+							},
+							dimension,
+						)
 
-func BenchmarkBlazeVectorSuite(b *testing.B) {
-	sizes := []uint64{64, 256, 1024, 4096, 16384}
-	scales := []float64{1, 10, 100, 1000}
+						memstruct.VectorSetFromSlice(
+							vector,
+							blazetesting.GenerateRandomVectorF64(dimension, rng),
+						)
 
-	for _, n := range sizes {
-		for _, scale := range scales {
-			group := fmt.Sprintf("N=%d/scale=%.0f", n, scale)
+						restore := func() {}
 
-			b.Run(group+"/Float64", func(b *testing.B) {
-				runVectorBench[float64](b, n, scale)
-			})
-			b.Run(group+"/Float32", func(b *testing.B) {
-				runVectorBench[float32](b, n, scale)
-			})
-			b.Run(group+"/Int64", func(b *testing.B) {
-				runVectorBench[int64](b, n, scale)
-			})
-			b.Run(group+"/Uint64", func(b *testing.B) {
-				runVectorBench[uint64](b, n, scale)
+						// --- Explicitly Force Go fallback if requested ---
+						if method == "Go" {
+							// Remove the kernel for the specific signature: Sum(F64) -> F64
+							old := simd.BlazeSIMDDispatchKernelRemove(
+								core.Blaze_Operation_Vector_Sum,
+								core.DTypeF64, // Output
+								core.DTypeF64, // Input
+							)
+
+							restore = func() {
+								// Restore the kernel so the "Asm" method run isn't broken
+								simd.BlazeSIMDDispatchKernelOverride(
+									core.Blaze_Operation_Vector_Sum,
+									core.DTypeF64,
+									old,
+									core.DTypeF64,
+								)
+							}
+						}
+
+						return benchData{
+							vector:    vector,
+							oldGC:     oldGC,
+							allocator: allocator,
+							restore:   restore,
+						}
+					},
+					// --- MEASUREMENT Phase ---
+					func(d benchData, b *testing.B) {
+						benchmarking.RunBatchedBenchmark(
+							b,
+							func(i int) {
+								sum := reduce.BlazeReduceVectorSumF64[float64](d.vector)
+								// Sink to prevent compiler from optimizing away the call
+								if sum > 1e300 {
+									fmt.Print("")
+								}
+							},
+							blazetesting.DefaultMaxHeapGrowth,
+							blazetesting.DefaultMaxHeapSize,
+							blazetesting.DefaultMemoryCheckInterval,
+						)
+					},
+					// --- TEARDOWN Phase ---
+					func(d benchData, b *testing.B) {
+						d.restore() // Crucial: Puts the Asm kernel back in the table
+						memforge.DynamicLinearAllocatorDestroy(d.allocator)
+						debug.SetGCPercent(d.oldGC)
+					},
+				)
 			})
 		}
 	}
-}
-
-// ────────────────────────────────────────────────────────────────
-//   PER-TYPE BENCH LOGIC
-// ────────────────────────────────────────────────────────────────
-
-func runVectorBench[T foundation.Numeric](b *testing.B, capacity uint64, scale float64) {
-	type benchData struct {
-		allocator memcore.MarkRaw
-		vector    memcore.MarkRaw
-		oldGC     int
-	}
-
-	benchmarking.BenchmarkWithMetrics(b,
-		// SETUP
-		func(b *testing.B) benchData {
-			old := debug.SetGCPercent(-1)
-			alloc := memforge.DynamicLinearAllocatorCreate(uint64(2*memcore.MegaByte), growthFnID)
-			vec, _ := memarch.MemArchVectorCreate[T](
-				func(size, align uint64) memcore.MarkRaw {
-					return memforge.DynamicLinearAllocatorCalloc(alloc, size, align)
-				},
-				capacity,
-			)
-			fillVectorRandom[T](vec, scale)
-			return benchData{alloc, vec, old}
-		},
-
-		// RUN
-		func(d benchData, b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				switch i % 7 {
-				case 0:
-					reduce.BlazeReduceVectorSumF64[T](d.vector)
-				case 1:
-					reduce.BlazeReduceVectorSumSquaredF64[T](d.vector)
-				case 2:
-					metric.BlazeMetricVectorMagnitudeF64[T](d.vector)
-				case 3:
-					metric.BlazeMetricVectorMagnitudeF32[T](d.vector)
-				case 4:
-					idx := uint64(i % int(capacity))
-					memstruct.VectorItemGetAtUnsafe[T](d.vector, idx)
-				case 5:
-					idx := uint64(i % int(capacity))
-					val := T(math.Mod(float64(i), scale))
-					memstruct.VectorSetAtUnsafe(d.vector, idx, val)
-				case 6:
-					scalar.BlazeScalarVectorMultiplyF64[T](d.vector, d.vector, float64(1.001))
-
-				}
-			}
-		},
-
-		// CLEANUP
-		func(d benchData, b *testing.B) {
-			memforge.DynamicLinearAllocatorDestroy(d.allocator)
-			debug.SetGCPercent(d.oldGC)
-		},
-	)
-}
-
-// ────────────────────────────────────────────────────────────────
-//   NORMALIZATION BENCHMARKS
-// ────────────────────────────────────────────────────────────────
-
-func BenchmarkBlazeVectorSuite_Normalization(b *testing.B) {
-	sizes := []uint64{128, 512, 2048}
-	for _, n := range sizes {
-		b.Run(fmt.Sprintf("Normalize/N=%d", n), func(b *testing.B) {
-			type benchData struct {
-				alloc memcore.MarkRaw
-				src   memcore.MarkRaw
-				dst   memcore.MarkRaw
-				oldGC int
-			}
-
-			benchmarking.BenchmarkWithMetrics(b,
-				func(b *testing.B) benchData {
-					old := debug.SetGCPercent(-1)
-					a := memforge.DynamicLinearAllocatorCreate(uint64(2*memcore.MegaByte), growthFnID)
-					src, _ := memarch.MemArchVectorCreate[float64](
-						func(size, align uint64) memcore.MarkRaw {
-							return memforge.DynamicLinearAllocatorCalloc(a, size, align)
-						}, n)
-					dst, _ := memarch.MemArchVectorCreate[float64](
-						func(size, align uint64) memcore.MarkRaw {
-							return memforge.DynamicLinearAllocatorCalloc(a, size, align)
-						}, n)
-					fillVectorRandom[float64](src, 100)
-					return benchData{a, src, dst, old}
-				},
-				func(d benchData, b *testing.B) {
-					for i := 0; i < b.N; i++ {
-						metric.BlazeMetricVectorNormalizedF64[float64](d.src, d.dst)
-					}
-				},
-				func(d benchData, b *testing.B) {
-					memforge.DynamicLinearAllocatorDestroy(d.alloc)
-					debug.SetGCPercent(d.oldGC)
-				},
-			)
-		})
-	}
-}
-
-// ────────────────────────────────────────────────────────────────
-//   EXTRA METRIC BENCHMARKS
-// ────────────────────────────────────────────────────────────────
-
-func BenchmarkBlazeVectorSuite_DotAndDistance(b *testing.B) {
-	n := uint64(1024)
-	b.Run(fmt.Sprintf("DotProduct/N=%d", n), func(b *testing.B) {
-		type benchData struct {
-			alloc memcore.MarkRaw
-			a     memcore.MarkRaw
-			bv    memcore.MarkRaw
-			oldGC int
-		}
-
-		benchmarking.BenchmarkWithMetrics(b,
-			func(b *testing.B) benchData {
-				old := debug.SetGCPercent(-1)
-				a := memforge.DynamicLinearAllocatorCreate(uint64(2*memcore.MegaByte), growthFnID)
-				v1, _ := memarch.MemArchVectorCreate[float64](
-					func(size, align uint64) memcore.MarkRaw {
-						return memforge.DynamicLinearAllocatorCalloc(a, size, align)
-					}, n)
-				v2, _ := memarch.MemArchVectorCreate[float64](
-					func(size, align uint64) memcore.MarkRaw {
-						return memforge.DynamicLinearAllocatorCalloc(a, size, align)
-					}, n)
-				fillVectorRandom[float64](v1, 100)
-				fillVectorRandom[float64](v2, 100)
-				return benchData{a, v1, v2, old}
-			},
-			func(d benchData, b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					reduce.BlazeReduceDotProductF64[float64, float64](d.a, d.bv)
-				}
-			},
-			func(d benchData, b *testing.B) {
-				memforge.DynamicLinearAllocatorDestroy(d.alloc)
-				debug.SetGCPercent(d.oldGC)
-			},
-		)
-	})
 }

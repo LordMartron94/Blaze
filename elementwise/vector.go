@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"blaze/simd"
 	"foundation"
 	"memcore"
 	"memstruct"
@@ -53,26 +52,10 @@ func BlazeElementWiseVectorAddF32[T, U foundation.Numeric](
 	dstSize := uintptr(memcore.SizeOf[float32]())
 	capacity := aCapacity
 
-	// Vectors are always contiguous (stride == element size)
-	aIsContiguous := true
-	bIsContiguous := true
-	dstIsContiguous := true
-
-	// Use SIMD if element sizes match float32 (4 bytes) - SIMD works on raw memory
-	// For other types, Go implementation handles type conversion
-	if aSize == 4 && bSize == 4 && dstSize == 4 {
-		simd.BlazeElementWiseVectorAddF32Dispatch(
-			unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
-			aSize, bSize, dstSize, capacity,
-			aIsContiguous, bIsContiguous, dstIsContiguous,
-			blazeElementWiseVectorAddF32Go[T, U],
-		)
-	} else {
-		blazeElementWiseVectorAddF32Go[T, U](
-			unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
-			aSize, bSize, dstSize, capacity,
-		)
-	}
+	blazeElementWiseVectorAddF32Go[T, U](
+		unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
+		aSize, bSize, dstSize, capacity,
+	)
 }
 
 //go:inline
@@ -162,25 +145,10 @@ func BlazeElementWiseVectorAddF64[T, U foundation.Numeric](
 	dstSize := uintptr(memcore.SizeOf[float64]())
 	capacity := aCapacity
 
-	// Vectors are always contiguous (stride == element size)
-	aIsContiguous := true
-	bIsContiguous := true
-	dstIsContiguous := true
-
-	// Use SIMD if element sizes match float64 (8 bytes)
-	if aSize == 8 && bSize == 8 && dstSize == 8 {
-		simd.BlazeElementWiseVectorAddF64Dispatch(
-			unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
-			aSize, bSize, dstSize, capacity,
-			aIsContiguous, bIsContiguous, dstIsContiguous,
-			blazeElementWiseVectorAddF64Go[T, U],
-		)
-	} else {
-		blazeElementWiseVectorAddF64Go[T, U](
-			unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
-			aSize, bSize, dstSize, capacity,
-		)
-	}
+	blazeElementWiseVectorAddF64Go[T, U](
+		unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
+		aSize, bSize, dstSize, capacity,
+	)
 }
 
 //go:inline
@@ -436,25 +404,10 @@ func BlazeElementWiseVectorMultiplyF32[T, U foundation.Numeric](
 	dstSize := uintptr(memcore.SizeOf[float32]())
 	capacity := aCapacity
 
-	// Vectors are always contiguous (stride == element size)
-	aIsContiguous := true
-	bIsContiguous := true
-	dstIsContiguous := true
-
-	// Use SIMD if element sizes match float32 (4 bytes)
-	if aSize == 4 && bSize == 4 && dstSize == 4 {
-		simd.BlazeElementWiseVectorMultiplyF32Dispatch(
-			unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
-			aSize, bSize, dstSize, capacity,
-			aIsContiguous, bIsContiguous, dstIsContiguous,
-			blazeElementWiseVectorMultiplyF32Go[T, U],
-		)
-	} else {
-		blazeElementWiseVectorMultiplyF32Go[T, U](
-			unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
-			aSize, bSize, dstSize, capacity,
-		)
-	}
+	blazeElementWiseVectorMultiplyF32Go[T, U](
+		unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
+		aSize, bSize, dstSize, capacity,
+	)
 }
 
 //go:inline
@@ -544,25 +497,10 @@ func BlazeElementWiseVectorMultiplyF64[T, U foundation.Numeric](
 	dstSize := uintptr(memcore.SizeOf[float64]())
 	capacity := aCapacity
 
-	// Vectors are always contiguous (stride == element size)
-	aIsContiguous := true
-	bIsContiguous := true
-	dstIsContiguous := true
-
-	// Use SIMD if element sizes match float64 (8 bytes)
-	if aSize == 8 && bSize == 8 && dstSize == 8 {
-		simd.BlazeElementWiseVectorMultiplyF64Dispatch(
-			unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
-			aSize, bSize, dstSize, capacity,
-			aIsContiguous, bIsContiguous, dstIsContiguous,
-			blazeElementWiseVectorMultiplyF64Go[T, U],
-		)
-	} else {
-		blazeElementWiseVectorMultiplyF64Go[T, U](
-			unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
-			aSize, bSize, dstSize, capacity,
-		)
-	}
+	blazeElementWiseVectorMultiplyF64Go[T, U](
+		unsafe.Pointer(aData), unsafe.Pointer(bData), unsafe.Pointer(dstData),
+		aSize, bSize, dstSize, capacity,
+	)
 }
 
 //go:inline
