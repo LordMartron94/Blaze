@@ -34,7 +34,14 @@ func BenchmarkVectorSum(b *testing.B) {
 					restore   func()
 				}
 
-				benchmarking.BenchmarkWithMetrics(b,
+				flopsPerOp := float64(dimension - 1)
+				bytesPerOp := float64(dimension * memcore.SizeOf[float64]())
+
+				benchmarking.BenchmarkWithMetricsConfig(b,
+					benchmarking.BenchmarkMetricsConfig{
+						FLOPSPerOp: flopsPerOp,
+						BytesPerOp: bytesPerOp,
+					},
 					// --- SETUP Phase ---
 					func(b *testing.B) benchData {
 						oldGC := debug.SetGCPercent(-1)
