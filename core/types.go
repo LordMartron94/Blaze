@@ -7,6 +7,8 @@ type BlazeOperationID = internal.BlazeOperationID
 
 const (
 	Blaze_Operation_Vector_Sum BlazeOperationID = iota
+	Blaze_Operation_SpeedOfLight
+	Blaze_Operation_SpeedOfLightThroughput
 
 	/* BLAZE_OPERATION_COUNT is a constant representing how manu operations are supported.
 
@@ -36,6 +38,8 @@ const (
 	DTypeU32
 	DTypeU16
 	DTypeU8
+
+	DTypeNone
 )
 
 /* BlazeDTypeGet returns the BlazeDataDType corresponding to the generic type T. */
@@ -62,6 +66,8 @@ func BlazeDTypeGet[T any]() BlazeDType {
 		return DTypeU16
 	case uint8:
 		return DTypeU8
+	case nil:
+		return DTypeNone
 	default:
 		return DTypeUnknown
 	}

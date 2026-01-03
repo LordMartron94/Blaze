@@ -46,6 +46,43 @@ func init() {
 		Priority: 20,
 		MinN:     512, // ASM improves on Go performance a lot sooner due to conversions happening inside the Go fallback.
 	})
+
+	// SoL
+	internal.Register(internal.KernelManifest{
+		// ---- Identity ----
+		Op:     core.Blaze_Operation_SpeedOfLight,
+		Inputs: []core.BlazeDType{core.DTypeNone},
+		Output: core.DTypeNone,
+
+		// ---- Implementation ----
+		Func: SpeedOfLightTest,
+
+		// ---- Constraints ----
+		RequiredISA:   internal.ISA_AVX2,
+		RequiredFlags: internal.Flag_NoRequirements,
+
+		// ---- Strategy ----
+		Priority: 20,
+		MinN:     0,
+	})
+
+	internal.Register(internal.KernelManifest{
+		// ---- Identity ----
+		Op:     core.Blaze_Operation_SpeedOfLightThroughput,
+		Inputs: []core.BlazeDType{core.DTypeF64},
+		Output: core.DTypeNone,
+
+		// ---- Implementation ----
+		Func: SpeedOfLightTest_Throughput,
+
+		// ---- Constraints ----
+		RequiredISA:   internal.ISA_AVX2,
+		RequiredFlags: internal.Flag_Aligned32 | internal.Flag_Contiguous,
+
+		// ---- Strategy ----
+		Priority: 20,
+		MinN:     0,
+	})
 }
 
 //go:noescape
@@ -53,3 +90,9 @@ func VectorSumF64iF64o__AVX2(frame *internal.BlazeKernelFrame)
 
 //go:noescape
 func VectorSumF32iF64o__AVX2(frame *internal.BlazeKernelFrame)
+
+//go:noescape
+func SpeedOfLightTest(frame *internal.BlazeKernelFrame)
+
+//go:noescape
+func SpeedOfLightTest_Throughput(frame *internal.BlazeKernelFrame)

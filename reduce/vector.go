@@ -347,6 +347,61 @@ func init() {
 	sumResult = &initRV
 }
 
+/* BlazeReduceSpeedOfLight is now a "Hardened" calibration function. */
+func BlazeReduceSpeedOfLight(frame *internal.BlazeKernelFrame) uint64 {
+	frame.Reset()
+	frame.WithDim(1, 0, 0)
+
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_SpeedOfLight, frame, core.DTypeNone, core.DTypeNone) {
+		panic("dispatch failed")
+	}
+
+	return frame.Dim[0]
+}
+
+/*
+BlazeReduceMemoryThroughput measures memory throughput by performing sequential memory loads without computation.
+
+This function uses the SpeedOfLightTest_Throughput assembly kernel which loads memory
+into AVX2 registers without performing any arithmetic operations, making it ideal for
+measuring raw memory bandwidth.
+
+Use cases:
+- Memory bandwidth benchmarking
+- Cache performance analysis
+- Memory subsystem stress testing
+
+Time complexity: O(n) - single pass through vector
+Space complexity: O(1) - no additional allocations
+
+Prerequisites:
+- Vector must be valid and initialized
+- SIMD dispatch must be initialized
+
+Edge cases:
+- Works with any numeric type
+- Requires AVX2 support for optimal performance
+- Panics if kernel dispatch fails
+*/
+func BlazeReduceMemoryThroughput[T foundation.Numeric](vector memcore.MarkRaw) {
+	data := memstruct.VectorDataPtrGet[T](vector)
+	capacity := memstruct.VectorCapacityGet[T](vector)
+
+	frame := internal.CurrentKernelFrame
+	frame.Reset().
+		WithDim(capacity, 0, 0).
+		WithBuffer(0, data, int64(memcore.SizeOf[T]())).
+		WithFlags(internal.Flag_Contiguous)
+
+	if memcore.IsAligned(data, 32) {
+		frame.Flags |= internal.Flag_Aligned32
+	}
+
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_SpeedOfLightThroughput, frame, core.DTypeNone, core.BlazeDTypeGet[T]()) {
+		panic("dispatch failed")
+	}
+}
+
 /*
 BlazeReduceVectorSumF64 computes the sum of all vector elements in float64 precision.
 
@@ -405,56 +460,23 @@ func blazeReduceVectorSumF64Go[T foundation.Numeric](
 
 	ptr := frame.Buffers[0].Ptr
 	baseP := unsafe.Pointer(ptr)
-	stride := frame.Buffers[0].Stride
 
 	var sum0, sum1 float64
 	var i uint64
 
-	// Optimize for contiguous memory: use direct pointer arithmetic
-	if (frame.Flags & internal.Flag_Contiguous) != 0 {
-		elementSize := uintptr(memcore.SizeOf[T]())
+	elementSize := uintptr(memcore.SizeOf[T]())
 
-		for ; i+7 < n; i += 8 {
-			sum0 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+0)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+1)*elementSize)))
-			sum1 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+2)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+3)*elementSize)))
-			sum0 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+4)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+5)*elementSize)))
-			sum1 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+6)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+7)*elementSize)))
-		}
-
-		finalSum := sum0 + sum1
-
-		for ; i < n; i++ {
-			finalSum += float64(*(*T)(unsafe.Add(baseP, uintptr(i)*elementSize)))
-		}
-
-		if frame.Returns[0] != nil {
-			*(*float64)(frame.Returns[0]) = finalSum
-		}
-		return
-	}
-
-	// Fallback: stride-based access for non-contiguous memory
 	for ; i+7 < n; i += 8 {
-		p0 := uintptr(int64(i+0) * stride)
-		p1 := uintptr(int64(i+1) * stride)
-		p2 := uintptr(int64(i+2) * stride)
-		p3 := uintptr(int64(i+3) * stride)
-		p4 := uintptr(int64(i+4) * stride)
-		p5 := uintptr(int64(i+5) * stride)
-		p6 := uintptr(int64(i+6) * stride)
-		p7 := uintptr(int64(i+7) * stride)
-
-		sum0 += float64(*(*T)(unsafe.Add(baseP, p0))) + float64(*(*T)(unsafe.Add(baseP, p1)))
-		sum1 += float64(*(*T)(unsafe.Add(baseP, p2))) + float64(*(*T)(unsafe.Add(baseP, p3)))
-		sum0 += float64(*(*T)(unsafe.Add(baseP, p4))) + float64(*(*T)(unsafe.Add(baseP, p5)))
-		sum1 += float64(*(*T)(unsafe.Add(baseP, p6))) + float64(*(*T)(unsafe.Add(baseP, p7)))
+		sum0 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+0)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+1)*elementSize)))
+		sum1 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+2)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+3)*elementSize)))
+		sum0 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+4)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+5)*elementSize)))
+		sum1 += float64(*(*T)(unsafe.Add(baseP, uintptr(i+6)*elementSize))) + float64(*(*T)(unsafe.Add(baseP, uintptr(i+7)*elementSize)))
 	}
 
 	finalSum := sum0 + sum1
 
 	for ; i < n; i++ {
-		offset := uintptr(int64(i) * stride)
-		finalSum += float64(*(*T)(unsafe.Add(baseP, offset)))
+		finalSum += float64(*(*T)(unsafe.Add(baseP, uintptr(i)*elementSize)))
 	}
 
 	if frame.Returns[0] != nil {

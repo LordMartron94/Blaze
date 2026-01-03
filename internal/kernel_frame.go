@@ -5,6 +5,7 @@ import "unsafe"
 type Flags uint64
 
 const (
+	Flag_NoRequirements   Flags = 0
 	Flag_Aligned32        Flags = 1 << 0 // Input pointers are 32-byte aligned
 	Flag_Contiguous       Flags = 1 << 1 // Stride is 1 element size (no gaps)
 	Flag_Accumulate       Flags = 1 << 2 // Result += NewVal instead of Result = NewVal

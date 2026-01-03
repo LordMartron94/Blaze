@@ -3,6 +3,38 @@
 #include "textflag.h"
 #include "../simd/asm_macros.h"
 
+TEXT ·SpeedOfLightTest(SB), NOSPLIT, $0
+    VZEROUPPER
+    RET
+
+TEXT ·SpeedOfLightTest_Throughput(SB), NOSPLIT, $0-8
+    MOVQ frame+0(FP), DI
+    MOVQ FRAME_BUF0_PTR(DI), AX 
+    MOVQ FRAME_DIM0(DI), BX    
+
+unrolled_loop:
+    CMPQ BX, $32
+    JL tail
+
+    VMOVAPD 0(AX), Y0
+    VMOVAPD 32(AX), Y1
+    VMOVAPD 64(AX), Y2
+    VMOVAPD 96(AX), Y3
+    VMOVAPD 128(AX), Y4
+    VMOVAPD 160(AX), Y5
+    VMOVAPD 192(AX), Y6
+    VMOVAPD 224(AX), Y7
+
+    ADDQ $256, AX
+    SUBQ $32, BX
+    JMP unrolled_loop
+
+tail:
+    // We ignore the tail for SoL calibration as we only 
+    // care about the peak performance in the unrolled section.
+    VZEROUPPER
+    RET
+
 TEXT ·VectorSumF64iF64o__AVX2(SB), NOSPLIT, $0-8
     // Load Frame Pointer from Go stack
     MOVQ frame+0(FP), DI
