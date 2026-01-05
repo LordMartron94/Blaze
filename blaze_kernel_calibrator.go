@@ -2,6 +2,7 @@ package blaze
 
 import (
 	"blaze/core"
+	"blaze/internal"
 	"blaze/simd"
 	blazetesting "blaze/testing"
 	"encoding/json"
@@ -81,6 +82,9 @@ func RunCalibrationSuite(
 
 	rng := rand.New(rand.NewSource(42))
 
+	override := uint64(0)
+	var overrideFlags internal.Flags = 0
+
 	// 3. Process Targets
 	for _, target := range targets {
 		fmt.Printf("\n>>> Calibrating: %s <<<\n", target.Name)
@@ -90,7 +94,7 @@ func RunCalibrationSuite(
 		simd.BlazeSIMDDispatchOverrideRequirements(
 			target.Operation,
 			target.OutputDType,
-			0, 0, // Force MinN=0, Flags=0
+			&override, &overrideFlags, // Force MinN=0, Flags=0
 			target.InputDTypes...,
 		)
 

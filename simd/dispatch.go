@@ -21,8 +21,8 @@ var dispatchTable [MaxOPS]unsafe.Pointer
 type dispatchMap map[uint32]core.BlazeExecutionFn
 
 type kernelRequirements struct {
-	MinN          uint64
-	RequiredFlags internal.Flags
+	MinN          *uint64
+	RequiredFlags *internal.Flags
 }
 
 var requirementOverrides map[uint32]kernelRequirements
@@ -49,43 +49,58 @@ func BlazeSIMDDispatchInit() {
 			sortByPriority(valid)
 			best := valid[0]
 
-			// Log kernel selection
 			logKernelSelection(op, sig, best)
 
-			// Check for requirement overrides
+			// Resolve initial effective requirements
 			override, hasOverride := getRequirementOverride(sig)
+
+			// Start with manifest defaults
 			minN := best.MinN
 			requiredFlags := best.RequiredFlags
+
+			// Apply overrides if present (Partial Update Logic)
 			if hasOverride {
-				minN = override.MinN
-				requiredFlags = override.RequiredFlags
+				if override.MinN != nil {
+					minN = *override.MinN
+				}
+				if override.RequiredFlags != nil {
+					requiredFlags = *override.RequiredFlags
+				}
 			}
 
+			// Optimization: If no runtime constraints exist, store raw function pointer
 			if minN == 0 && requiredFlags == 0 {
 				storeInTable(op, sig, best.Func)
 				continue
 			}
 
-			// If it HAS constraints, wrap it.
-			// Capture the override values (or original values) in the closure
-			constrainedMinN := minN
-			constrainedRequiredFlags := requiredFlags
+			// If constraints exist (either from manifest or override), wrap it.
+			// We capture the initial state, but the wrapper checks for dynamic updates.
+			initialMinN := minN
+			initialFlags := requiredFlags
+
 			constrainedFn := func(frame *internal.BlazeKernelFrame) {
-				// Check for runtime override (may have been set after initialization)
+				effectiveMinN := initialMinN
+				effectiveFlags := initialFlags
+
 				runtimeOverride, hasRuntimeOverride := getRequirementOverride(sig)
-				effectiveMinN := constrainedMinN
-				effectiveRequiredFlags := constrainedRequiredFlags
 				if hasRuntimeOverride {
-					effectiveMinN = runtimeOverride.MinN
-					effectiveRequiredFlags = runtimeOverride.RequiredFlags
+					if runtimeOverride.MinN != nil {
+						effectiveMinN = *runtimeOverride.MinN
+					}
+					if runtimeOverride.RequiredFlags != nil {
+						effectiveFlags = *runtimeOverride.RequiredFlags
+					}
 				}
 
-				if effectiveMinN == 0 && effectiveRequiredFlags == 0 {
+				// 2. Fast Path check inside wrapper
+				if effectiveMinN == 0 && effectiveFlags == 0 {
 					best.Func(frame)
 					return
 				}
 
-				if frame.Dim[0] >= effectiveMinN && (frame.Flags&effectiveRequiredFlags) == effectiveRequiredFlags {
+				// 3. Validation Logic
+				if frame.Dim[0] >= effectiveMinN && (frame.Flags&effectiveFlags) == effectiveFlags {
 					best.Func(frame)
 				} else {
 					frame.Flags |= internal.Flag_FailedConstraint
@@ -241,12 +256,14 @@ This allows overriding MinN and RequiredFlags for kernels, which is useful for b
 to ensure ASM kernels execute regardless of dimension constraints.
 
 The override persists until explicitly cleared or the dispatch table is reinitialized.
+
+Passing nil for a parameter means "do not override this specific requirement".
 */
 func BlazeSIMDDispatchOverrideRequirements(
 	op core.BlazeOperationID,
 	out core.BlazeDType,
-	minN uint64,
-	requiredFlags internal.Flags,
+	minN *uint64,
+	requiredFlags *internal.Flags,
 	inputs ...core.BlazeDType,
 ) {
 	sig := internal.PackSignature(out, inputs...)
@@ -255,10 +272,16 @@ func BlazeSIMDDispatchOverrideRequirements(
 		requirementOverrides = make(map[uint32]kernelRequirements)
 	}
 
-	requirementOverrides[sig] = kernelRequirements{
-		MinN:          minN,
-		RequiredFlags: requiredFlags,
+	current := requirementOverrides[sig]
+
+	if minN != nil {
+		current.MinN = minN
 	}
+	if requiredFlags != nil {
+		current.RequiredFlags = requiredFlags
+	}
+
+	requirementOverrides[sig] = current
 }
 
 /*

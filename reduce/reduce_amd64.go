@@ -25,7 +25,7 @@ func init() {
 
 		// ---- Strategy ----
 		Priority: 20,
-		MinN:     2048, // ASM only improves on Go performance when vectors become really big.
+		MinN:     2300, // ASM only improves on Go performance when vectors become really big.
 	})
 
 	// F32->F64
@@ -44,7 +44,7 @@ func init() {
 
 		// ---- Strategy ----
 		Priority: 20,
-		MinN:     512, // ASM improves on Go performance a lot sooner due to conversions happening inside the Go fallback.
+		MinN:     1400, // ASM improves on Go performance a lot sooner due to conversions happening inside the Go fallback.
 	})
 
 	// SoL
