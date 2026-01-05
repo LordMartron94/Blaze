@@ -96,36 +96,6 @@ func BlazeSIMDDispatchInit() {
 	}
 }
 
-func compileHybridKernel(candidates []internal.KernelManifest) core.BlazeExecutionFn {
-	best := candidates[0]
-
-	var fallback core.BlazeExecutionFn
-	for _, c := range candidates {
-		if c.MinN == 0 && c.RequiredFlags == 0 {
-			fallback = c.Func
-			break
-		}
-	}
-
-	if fallback == nil {
-		panic("Configuration Error: High-perf kernel requires MinN but no scalar fallback exists!")
-	}
-
-	return func(frame *internal.BlazeKernelFrame) {
-		if (frame.Flags & best.RequiredFlags) != best.RequiredFlags {
-			fallback(frame)
-			return
-		}
-
-		if frame.Dim[0] < best.MinN {
-			fallback(frame)
-			return
-		}
-
-		best.Func(frame)
-	}
-}
-
 func resolveFast(op core.BlazeOperationID, sig uint32) core.BlazeExecutionFn {
 	ptr := dispatchTable[op]
 
