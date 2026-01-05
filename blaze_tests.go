@@ -37,6 +37,7 @@ func BlazeTestSuite(t *testing.T) {
 
 			BlazeTestSumF64Path[float64](t, allocator, dimension, rng, core.DTypeF64, 1e-14)
 			BlazeTestSumF64Path[float32](t, allocator, dimension, rng, core.DTypeF32, 1e-6)
+			BlazeTestSumF32Path[float32](t, allocator, dimension, rng, core.DTypeF32, 1e-6)
 		})
 	}
 }
@@ -93,7 +94,8 @@ func BlazeTestSumF64Path[T foundation.Numeric](
 		return
 	}
 
-	sumBaseline := reduce.BlazeReduceVectorSumF64[T](vector)
+	var sumBaseline float64
+	reduce.BlazeReduceVectorSumF64[T](vector, &sumBaseline)
 
 	oldKernel := simd.BlazeSIMDDispatchKernelRemove(
 		core.Blaze_Operation_Vector_Sum,
@@ -101,7 +103,8 @@ func BlazeTestSumF64Path[T foundation.Numeric](
 		inputDType,
 	)
 
-	sumGo := reduce.BlazeReduceVectorSumF64[T](vector)
+	var sumGo float64
+	reduce.BlazeReduceVectorSumF64[T](vector, &sumGo)
 
 	simd.BlazeSIMDDispatchKernelOverride(
 		core.Blaze_Operation_Vector_Sum,
@@ -117,6 +120,82 @@ func BlazeTestSumF64Path[T foundation.Numeric](
 		Debug("testing signature")
 
 	AssertClose(t, sumBaseline, sumGo, epsilon, sigStr)
+}
+
+/*
+BlazeTestSumF32Path tests the Float32 sum reduction path for a given input type.
+
+Similar to the F64 path, this compares the optimized SIMD kernel against the
+pure Go fallback, but specifically for operations yielding a Float32 result.
+
+Time complexity: O(n)
+Space complexity: O(n)
+*/
+func BlazeTestSumF32Path[T foundation.Numeric](
+	t *testing.T,
+	allocator memcore.MarkRaw,
+	dimension uint64,
+	rng *rand.Rand,
+	inputDType core.BlazeDType,
+	epsilon float64,
+) {
+	t.Helper()
+
+	// 1. Setup Vector
+	vector, _ := memarch.MemArchVectorCreate[T](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(
+				allocator, sizeBytes, alignment,
+			)
+		},
+		dimension,
+	)
+
+	// 2. Generate Random Data
+	var zero T
+	switch any(zero).(type) {
+	case float32:
+		values := blazetesting.GenerateRandomVectorF32(dimension, rng)
+		memstruct.VectorSetFromSlice(vector, values)
+	default:
+		// Currently only F32->F32 is commonly tested, but structure allows expansion
+		t.Fatalf("unsupported input type for F32 sum test")
+		return
+	}
+
+	// 3. Run Optimized Baseline (SIMD)
+	var sumBaseline float32
+	reduce.BlazeReduceVectorSumF32[T](vector, &sumBaseline)
+
+	// 4. Force Fallback (Remove Kernel)
+	// We target the Output Type: core.DTypeF32
+	oldKernel := simd.BlazeSIMDDispatchKernelRemove(
+		core.Blaze_Operation_Vector_Sum,
+		core.DTypeF32,
+		inputDType,
+	)
+
+	// 5. Run Go Fallback
+	var sumGo float32
+	reduce.BlazeReduceVectorSumF32[T](vector, &sumGo)
+
+	// 6. Restore Kernel
+	simd.BlazeSIMDDispatchKernelOverride(
+		core.Blaze_Operation_Vector_Sum,
+		core.DTypeF32,
+		oldKernel,
+		inputDType,
+	)
+
+	// 7. Log & Compare
+	sigStr := formatTestSignature(core.DTypeF32, inputDType)
+	echo.On(core.BlazeUUID).
+		Field("sig", sigStr).
+		Field("dimension", dimension).
+		Debug("testing signature")
+
+	// Cast float32 results to float64 for the shared assertion logic
+	AssertClose(t, float64(sumGo), float64(sumBaseline), epsilon, sigStr)
 }
 
 func AssertClose(t *testing.T, sumGo, sumAsm float64, epsilon float64, sigStr string) {

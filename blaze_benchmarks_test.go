@@ -19,39 +19,65 @@ import (
 	"testing"
 )
 
+var GlobalSink uint64
+var GlobalSinkF32 float32
+var GlobalSinkF64 float64
+
 func BenchmarkVectorSum(b *testing.B) {
 	// 1. Initialize the library once for the entire benchmark suite
 	simd.BlazeSIMDDispatchInit()
 
+	override := uint64(0)
+	var overrideFlags internal.Flags = 0
+
 	// 2. Override kernel requirements to ensure ASM kernels always execute
-	// This prevents benchmarks from unintentionally using Go fallback due to MinN constraints
+	// F64 Output Overrides
 	simd.BlazeSIMDDispatchOverrideRequirements(
 		core.Blaze_Operation_Vector_Sum,
-		core.DTypeF64, // Output
-		0,             // MinN = 0 (no minimum dimension requirement)
-		0,             // RequiredFlags = 0 (no flag requirements)
-		core.DTypeF64, // Input: F64 -> F64 path
+		core.DTypeF64,
+		&override, &overrideFlags,
+		core.DTypeF64, // F64 -> F64
 	)
 	simd.BlazeSIMDDispatchOverrideRequirements(
 		core.Blaze_Operation_Vector_Sum,
-		core.DTypeF64, // Output
-		0,             // MinN = 0 (no minimum dimension requirement)
-		0,             // RequiredFlags = 0 (no flag requirements)
-		core.DTypeF32, // Input: F32 -> F64 path
+		core.DTypeF64,
+		&override, &overrideFlags,
+		core.DTypeF32, // F32 -> F64
 	)
 
-	// 3. Clear overrides when done to prevent affecting other tests
+	// F32 Output Overrides (NEW)
+	simd.BlazeSIMDDispatchOverrideRequirements(
+		core.Blaze_Operation_Vector_Sum,
+		core.DTypeF32,
+		&override, &overrideFlags,
+		core.DTypeF32, // F32 -> F32
+	)
+
+	// 3. Clear overrides when done
 	defer simd.BlazeSIMDDispatchClearAllRequirementOverrides()
 
 	dimensions := []uint64{128, 384, 768, 1024, 100_000, 1_000_000}
 	methods := []string{"Go", "Asm"}
 
-	// Benchmark both F32 -> F64 and F64 -> F64 paths
-	benchmarkVectorSumForType[float32](b, dimensions, methods, "F32")
-	benchmarkVectorSumForType[float64](b, dimensions, methods, "F64")
-}
+	// --- F64 Output Paths ---
+	// F32(in) -> F64(out)
+	benchmarkVectorSumGeneric[float32](
+		b, dimensions, methods, "F32", "F64", core.DTypeF64,
+		func(v memcore.MarkRaw, res *float64) { reduce.BlazeReduceVectorSumF64[float32](v, res) },
+	)
+	// F64(in) -> F64(out)
+	benchmarkVectorSumGeneric[float64](
+		b, dimensions, methods, "F64", "F64", core.DTypeF64,
+		func(v memcore.MarkRaw, res *float64) { reduce.BlazeReduceVectorSumF64[float64](v, res) },
+	)
 
-var GlobalSink uint64
+	// --- F32 Output Paths ---
+	// F32(in) -> F32(out) (NEW)
+	benchmarkVectorSumGeneric[float32](
+		b, dimensions, methods, "F32", "F32", core.DTypeF32,
+		func(v memcore.MarkRaw, res *float32) { reduce.BlazeReduceVectorSumF32[float32](v, res) },
+	)
+}
 
 func BenchmarkVectorSpeedOfLight(b *testing.B) {
 	simd.BlazeSIMDDispatchInit()
@@ -87,7 +113,6 @@ func BenchmarkVectorSpeedOfLight(b *testing.B) {
 
 func BenchmarkVectorMemoryThroughput(b *testing.B) {
 	simd.BlazeSIMDDispatchInit()
-
 	dimensions := []uint64{1024, 10_000, 100_000, 1_000_000, 10_000_000}
 
 	for _, dimension := range dimensions {
@@ -97,48 +122,26 @@ func BenchmarkVectorMemoryThroughput(b *testing.B) {
 				oldGC     int
 				allocator memcore.MarkRaw
 			}
-
 			bytesPerOp := float64(dimension * memcore.SizeOf[float64]())
 
 			benchmarking.BenchmarkWithMetricsConfig(b,
-				benchmarking.BenchmarkMetricsConfig{
-					BytesPerOp: bytesPerOp,
-				},
-				// --- SETUP Phase ---
+				benchmarking.BenchmarkMetricsConfig{BytesPerOp: bytesPerOp},
 				func(b *testing.B) benchData {
 					oldGC := debug.SetGCPercent(-1)
 					rng := rand.New(rand.NewSource(42))
-
-					// Use a larger initial capacity to avoid reallocations during setup
 					allocator := memforge.DynamicLinearAllocatorCreateFunction(
 						uint64(dimension*uint64(memcore.SizeOf[float64]())+1024),
 						blazetesting.DoubleGrowth,
 					)
-
 					vector, _ := memarch.MemArchVectorCreate[float64](
 						func(sizeBytes, alignment uint64) memcore.MarkRaw {
-							return memforge.DynamicLinearAllocatorMallocUnsafe(
-								allocator,
-								sizeBytes,
-								alignment,
-							)
+							return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
 						},
 						dimension,
 					)
-
-					// Generate random data
-					memstruct.VectorSetFromSlice(
-						vector,
-						blazetesting.GenerateRandomVectorF64(dimension, rng),
-					)
-
-					return benchData{
-						vector:    vector,
-						oldGC:     oldGC,
-						allocator: allocator,
-					}
+					memstruct.VectorSetFromSlice(vector, blazetesting.GenerateRandomVectorF64(dimension, rng))
+					return benchData{vector: vector, oldGC: oldGC, allocator: allocator}
 				},
-				// --- MEASUREMENT Phase ---
 				func(d benchData, b *testing.B) {
 					benchmarking.RunBatchedBenchmark(
 						b,
@@ -150,7 +153,6 @@ func BenchmarkVectorMemoryThroughput(b *testing.B) {
 						blazetesting.DefaultMemoryCheckInterval,
 					)
 				},
-				// --- TEARDOWN Phase ---
 				func(d benchData, b *testing.B) {
 					memforge.DynamicLinearAllocatorDestroy(d.allocator)
 					debug.SetGCPercent(d.oldGC)
@@ -160,15 +162,20 @@ func BenchmarkVectorMemoryThroughput(b *testing.B) {
 	}
 }
 
-func benchmarkVectorSumForType[T foundation.Numeric](
+// benchmarkVectorSumGeneric handles both Input (T) and Output (U) types.
+// It accepts a 'reducer' closure to bridge the gap between distinct API functions.
+func benchmarkVectorSumGeneric[T foundation.Numeric, U foundation.Numeric](
 	b *testing.B,
 	dimensions []uint64,
 	methods []string,
-	inputTypeName string,
+	inName string,
+	outName string,
+	outDType core.BlazeDType,
+	reducer func(memcore.MarkRaw, *U),
 ) {
 	for _, method := range methods {
 		for _, dimension := range dimensions {
-			b.Run(fmt.Sprintf("InputType=%s/Dimension=%d/Method=%s", inputTypeName, dimension, method), func(b *testing.B) {
+			b.Run(fmt.Sprintf("In=%s/Out=%s/Dim=%d/Method=%s", inName, outName, dimension, method), func(b *testing.B) {
 
 				type benchData struct {
 					vector    memcore.MarkRaw
@@ -190,7 +197,6 @@ func benchmarkVectorSumForType[T foundation.Numeric](
 						oldGC := debug.SetGCPercent(-1)
 						rng := rand.New(rand.NewSource(42))
 
-						// Use a larger initial capacity to avoid reallocations during setup
 						allocator := memforge.DynamicLinearAllocatorCreateFunction(
 							uint64(dimension*uint64(memcore.SizeOf[T]())+1024),
 							blazetesting.DoubleGrowth,
@@ -198,49 +204,36 @@ func benchmarkVectorSumForType[T foundation.Numeric](
 
 						vector, _ := memarch.MemArchVectorCreate[T](
 							func(sizeBytes, alignment uint64) memcore.MarkRaw {
-								return memforge.DynamicLinearAllocatorMallocUnsafe(
-									allocator,
-									sizeBytes,
-									alignment,
-								)
+								return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
 							},
 							dimension,
 						)
 
-						// Generate data based on input type
+						// Initialize data
 						var zero T
 						switch any(zero).(type) {
 						case float32:
-							memstruct.VectorSetFromSlice(
-								vector,
-								blazetesting.GenerateRandomVectorF32(dimension, rng),
-							)
+							memstruct.VectorSetFromSlice(vector, blazetesting.GenerateRandomVectorF32(dimension, rng))
 						case float64:
-							memstruct.VectorSetFromSlice(
-								vector,
-								blazetesting.GenerateRandomVectorF64(dimension, rng),
-							)
+							memstruct.VectorSetFromSlice(vector, blazetesting.GenerateRandomVectorF64(dimension, rng))
 						default:
 							b.Fatalf("unsupported type for benchmark")
 						}
 
 						restore := func() {}
 
-						// --- Explicitly Force Go fallback if requested ---
+						// Force Go fallback if requested
 						if method == "Go" {
-							// Remove the kernel for the specific signature: Sum(T) -> F64
 							inputDType := core.BlazeDTypeGet[T]()
 							old := simd.BlazeSIMDDispatchKernelRemove(
 								core.Blaze_Operation_Vector_Sum,
-								core.DTypeF64, // Output (always F64)
-								inputDType,    // Input (F32 or F64)
+								outDType, // Remove specific Output kernel
+								inputDType,
 							)
-
 							restore = func() {
-								// Restore the kernel so the "Asm" method run isn't broken
 								simd.BlazeSIMDDispatchKernelOverride(
 									core.Blaze_Operation_Vector_Sum,
-									core.DTypeF64,
+									outDType,
 									old,
 									inputDType,
 								)
@@ -259,10 +252,15 @@ func benchmarkVectorSumForType[T foundation.Numeric](
 						benchmarking.RunBatchedBenchmark(
 							b,
 							func(i int) {
-								sum := reduce.BlazeReduceVectorSumF64[T](d.vector)
-								// Sink to prevent compiler from optimizing away the call
-								if sum > 1e300 {
-									fmt.Print("")
+								var sum U
+								reducer(d.vector, &sum)
+
+								// Efficient Global Sink (No IO, No Optimizing Away)
+								switch s := any(sum).(type) {
+								case float32:
+									GlobalSinkF32 = s
+								case float64:
+									GlobalSinkF64 = s
 								}
 							},
 							blazetesting.DefaultMaxHeapGrowth,
@@ -272,7 +270,7 @@ func benchmarkVectorSumForType[T foundation.Numeric](
 					},
 					// --- TEARDOWN Phase ---
 					func(d benchData, b *testing.B) {
-						d.restore() // Crucial: Puts the Asm kernel back in the table
+						d.restore()
 						memforge.DynamicLinearAllocatorDestroy(d.allocator)
 						debug.SetGCPercent(d.oldGC)
 					},

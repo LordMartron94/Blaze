@@ -194,3 +194,90 @@ reduce:
     MOVSD X0, (DX)
     VZEROUPPER
     RET
+
+TEXT ·VectorSumF32iF32o__AVX2(SB), NOSPLIT, $0-8
+    MOVQ frame+0(FP), DI
+
+    // 1. Load Execution Bounds & Pointers
+    MOVQ FRAME_BUF0_PTR(DI), AX  // AX = Data
+    MOVQ FRAME_DIM0(DI), BX      // BX = N
+    MOVQ FRAME_RET0(DI), DX      // DX = Return Ptr
+
+    // 2. Initialize Accumulators
+    VPXOR Y0, Y0, Y0
+    VPXOR Y1, Y1, Y1
+    VPXOR Y2, Y2, Y2
+    VPXOR Y3, Y3, Y3
+
+unrolled_loop:
+    // Check if we have at least 32 elements (4 vectors of 8)
+    CMPQ BX, $32
+    JL middle_loop
+
+    PREFETCHT0 256(AX)
+
+    // Load 32x float32s (4 Vectors)
+    VMOVAPS 0(AX), Y4
+    VMOVAPS 32(AX), Y5
+    VMOVAPS 64(AX), Y6
+    VMOVAPS 96(AX), Y7
+
+    // Parallel Fused Accumulation
+    VADDPS Y4, Y0, Y0
+    VADDPS Y5, Y1, Y1
+    VADDPS Y6, Y2, Y2
+    VADDPS Y7, Y3, Y3
+
+    // Advance Pointers: 32 elements * 4 bytes = 128
+    ADDQ $128, AX
+    SUBQ $32, BX
+    JMP unrolled_loop
+
+middle_loop:
+    CMPQ BX, $8
+    JL merge_accumulators
+
+    VMOVAPS 0(AX), Y4
+    VADDPS Y4, Y0, Y0
+
+    // Advance Pointers: 8 elements * 4 bytes = 32
+    ADDQ $32, AX
+    SUBQ $8, BX
+    JMP middle_loop
+
+merge_accumulators:
+    // Fold 4 accumulators into 1 (Y0)
+    VADDPS Y1, Y0, Y0
+    VADDPS Y3, Y2, Y2
+    VADDPS Y2, Y0, Y0
+
+tail:
+    CMPQ BX, $0
+    JE reduce
+
+    MOVSS 0(AX), X4
+    ADDSS X4, X0
+
+    ADDQ $4, AX
+    DECQ BX
+    JMP tail
+
+reduce:    
+    // 1. Fold YMM (256-bit) -> XMM (128-bit)
+    // Y0 = [H, G, F, E, D, C, B, A]
+    VEXTRACTF128 $1, Y0, X1  // X1 = [H, G, F, E]
+    VADDPS X1, X0, X0        // X0 = [H+D, G+C, F+B, E+A]
+
+    // 2. Fold High 64-bits -> Low 64-bits
+    MOVHLPS X0, X1           // X1 = [?, ?, H+D, G+C] (Upper 2 floats move to lower 2)
+    VADDPS X1, X0, X0        // X0 = [?, ?, (H+D)+(F+B), (G+C)+(E+A)]
+    
+    // 3. Fold Final 2 Floats
+    // X0 low is now two partial sums. We need to add them.
+    // Move 2nd float to 1st position (Shift Right 4 bytes)
+    MOVSHDUP X0, X1          // X1[0] = X0[1] ((G+C)+(E+A))
+    ADDSS X1, X0             // Scalar Add
+
+    MOVSS X0, (DX)
+    VZEROUPPER
+    RET

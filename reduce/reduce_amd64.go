@@ -47,6 +47,25 @@ func init() {
 		MinN:     1400, // ASM improves on Go performance a lot sooner due to conversions happening inside the Go fallback.
 	})
 
+	// F32->F32
+	internal.Register(internal.KernelManifest{
+		// ---- Identity ----
+		Op:     core.Blaze_Operation_Vector_Sum,
+		Inputs: []core.BlazeDType{core.DTypeF32},
+		Output: core.DTypeF32,
+
+		// ---- Implementation ----
+		Func: VectorSumF32iF32o__AVX2,
+
+		// ---- Constraints ----
+		RequiredISA:   internal.ISA_AVX2,
+		RequiredFlags: internal.Flag_Aligned32 | internal.Flag_Contiguous,
+
+		// ---- Strategy ----
+		Priority: 20,
+		MinN:     0,
+	})
+
 	// SoL
 	internal.Register(internal.KernelManifest{
 		// ---- Identity ----
@@ -90,6 +109,9 @@ func VectorSumF64iF64o__AVX2(frame *internal.BlazeKernelFrame)
 
 //go:noescape
 func VectorSumF32iF64o__AVX2(frame *internal.BlazeKernelFrame)
+
+//go:noescape
+func VectorSumF32iF32o__AVX2(frame *internal.BlazeKernelFrame)
 
 //go:noescape
 func SpeedOfLightTest(frame *internal.BlazeKernelFrame)

@@ -302,103 +302,58 @@ Edge cases:
 - Potential precision loss for large integer sums
 - No overflow checking (relies on Go's numeric behavior)
 */
-func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw) float32 {
+func BlazeReduceVectorSumF32[T foundation.Numeric](vector memcore.MarkRaw, output *float32) {
 	data := memstruct.VectorDataPtrGet[T](vector)
-	size := uintptr(memcore.SizeOf[T]())
-	capacity := memstruct.VectorCapacityGet[T](vector)
-
-	return blazeReduceVectorSumF32Go[T](data, size, capacity)
-}
-
-//go:inline
-func blazeReduceVectorSumF32Go[T foundation.Numeric](
-	data unsafe.Pointer, size uintptr, capacity uint64,
-) float32 {
-	var sum float32
-	var i uint64
-
-	// Manually unrolled loop for stride 8
-	for ; i+7 < capacity; i += 8 {
-		v0 := float32(*(*T)(unsafe.Add(data, uintptr(i+0)*size)))
-		v1 := float32(*(*T)(unsafe.Add(data, uintptr(i+1)*size)))
-		v2 := float32(*(*T)(unsafe.Add(data, uintptr(i+2)*size)))
-		v3 := float32(*(*T)(unsafe.Add(data, uintptr(i+3)*size)))
-		v4 := float32(*(*T)(unsafe.Add(data, uintptr(i+4)*size)))
-		v5 := float32(*(*T)(unsafe.Add(data, uintptr(i+5)*size)))
-		v6 := float32(*(*T)(unsafe.Add(data, uintptr(i+6)*size)))
-		v7 := float32(*(*T)(unsafe.Add(data, uintptr(i+7)*size)))
-
-		sum += v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7
-	}
-
-	// Handle remaining elements
-	for ; i < capacity; i++ {
-		v := float32(*(*T)(unsafe.Add(data, uintptr(i)*size)))
-		sum += v
-	}
-
-	return sum
-}
-
-var sumResult *float64
-
-func init() {
-	initRV := 0.0
-	sumResult = &initRV
-}
-
-/* BlazeReduceSpeedOfLight is now a "Hardened" calibration function. */
-func BlazeReduceSpeedOfLight(frame *internal.BlazeKernelFrame) uint64 {
-	frame.Reset()
-	frame.WithDim(1, 0, 0)
-
-	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_SpeedOfLight, frame, core.DTypeNone, core.DTypeNone) {
-		panic("dispatch failed")
-	}
-
-	return frame.Dim[0]
-}
-
-/*
-BlazeReduceMemoryThroughput measures memory throughput by performing sequential memory loads without computation.
-
-This function uses the SpeedOfLightTest_Throughput assembly kernel which loads memory
-into AVX2 registers without performing any arithmetic operations, making it ideal for
-measuring raw memory bandwidth.
-
-Use cases:
-- Memory bandwidth benchmarking
-- Cache performance analysis
-- Memory subsystem stress testing
-
-Time complexity: O(n) - single pass through vector
-Space complexity: O(1) - no additional allocations
-
-Prerequisites:
-- Vector must be valid and initialized
-- SIMD dispatch must be initialized
-
-Edge cases:
-- Works with any numeric type
-- Requires AVX2 support for optimal performance
-- Panics if kernel dispatch fails
-*/
-func BlazeReduceMemoryThroughput[T foundation.Numeric](vector memcore.MarkRaw) {
-	data := memstruct.VectorDataPtrGet[T](vector)
-	capacity := memstruct.VectorCapacityGet[T](vector)
+	n := memstruct.VectorCapacityGet[T](vector)
 
 	frame := internal.CurrentKernelFrame
 	frame.Reset().
-		WithDim(capacity, 0, 0).
+		WithDim(n, 0, 0).
 		WithBuffer(0, data, int64(memcore.SizeOf[T]())).
+		WithReturn(0, unsafe.Pointer(output)).
 		WithFlags(internal.Flag_Contiguous)
 
 	if memcore.IsAligned(data, 32) {
 		frame.Flags |= internal.Flag_Aligned32
 	}
 
-	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_SpeedOfLightThroughput, frame, core.DTypeNone, core.BlazeDTypeGet[T]()) {
-		panic("dispatch failed")
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_Vector_Sum, frame, core.DTypeF32, core.BlazeDTypeGet[T]()) {
+		blazeReduceVectorSumF32Go[T](frame)
+	}
+}
+
+//go:inline
+func blazeReduceVectorSumF32Go[T foundation.Numeric](
+	frame *internal.BlazeKernelFrame,
+) {
+	n := frame.Dim[0]
+	if n == 0 {
+		return
+	}
+
+	ptr := frame.Buffers[0].Ptr
+	baseP := unsafe.Pointer(ptr)
+
+	var sum0, sum1 float32
+	var i uint64
+
+	elementSize := uintptr(memcore.SizeOf[T]())
+
+	for ; i+7 < n; i += 8 {
+		sum0 += float32(*(*T)(unsafe.Add(baseP, uintptr(i+0)*elementSize))) + float32(*(*T)(unsafe.Add(baseP, uintptr(i+1)*elementSize)))
+		sum1 += float32(*(*T)(unsafe.Add(baseP, uintptr(i+2)*elementSize))) + float32(*(*T)(unsafe.Add(baseP, uintptr(i+3)*elementSize)))
+		sum0 += float32(*(*T)(unsafe.Add(baseP, uintptr(i+4)*elementSize))) + float32(*(*T)(unsafe.Add(baseP, uintptr(i+5)*elementSize)))
+		sum1 += float32(*(*T)(unsafe.Add(baseP, uintptr(i+6)*elementSize))) + float32(*(*T)(unsafe.Add(baseP, uintptr(i+7)*elementSize)))
+	}
+
+	finalSum := sum0 + sum1
+
+	for ; i < n; i++ {
+		finalSum += float32(*(*T)(unsafe.Add(baseP, uintptr(i)*elementSize)))
+	}
+
+	if frame.Returns[0] != nil {
+		*(*float32)(frame.Returns[0]) = finalSum
 	}
 }
 
@@ -426,16 +381,15 @@ Edge cases:
 - Better precision than F32 variant for large sums
 - No overflow checking (relies on Go's numeric behavior)
 */
-func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw) float64 {
+func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw, output *float64) {
 	data := memstruct.VectorDataPtrGet[T](vector)
 	n := memstruct.VectorCapacityGet[T](vector)
-	*sumResult = 0.0
 
 	frame := internal.CurrentKernelFrame
 	frame.Reset().
 		WithDim(n, 0, 0).
 		WithBuffer(0, data, int64(memcore.SizeOf[T]())).
-		WithReturn(0, unsafe.Pointer(sumResult)).
+		WithReturn(0, unsafe.Pointer(output)).
 		WithFlags(internal.Flag_Contiguous)
 
 	if memcore.IsAligned(data, 32) {
@@ -445,8 +399,6 @@ func BlazeReduceVectorSumF64[T foundation.Numeric](vector memcore.MarkRaw) float
 	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_Vector_Sum, frame, core.DTypeF64, core.BlazeDTypeGet[T]()) {
 		blazeReduceVectorSumF64Go[T](frame)
 	}
-
-	return *sumResult
 }
 
 //go:inline
@@ -808,7 +760,8 @@ Edge cases:
 - Potential precision loss for large integer means
 */
 func BlazeReduceVectorMeanF32[T foundation.Numeric](vector memcore.MarkRaw) float32 {
-	sum := BlazeReduceVectorSumF32[T](vector)
+	var sum float32
+	BlazeReduceVectorSumF32[T](vector, &sum)
 	count := float32(memstruct.VectorCapacityGet[T](vector))
 	return sum / count
 }
@@ -841,7 +794,8 @@ Edge cases:
 - Better precision than F32 variant for large values
 */
 func BlazeReduceVectorMeanF64[T foundation.Numeric](vector memcore.MarkRaw) float64 {
-	sum := BlazeReduceVectorSumF64[T](vector)
+	var sum float64
+	BlazeReduceVectorSumF64[T](vector, &sum)
 	count := float64(memstruct.VectorCapacityGet[T](vector))
 	return sum / count
 }
@@ -1022,4 +976,59 @@ func BlazeReduceCovarianceF64[T, U foundation.Numeric](
 	}
 
 	return covariance
+}
+
+/* BlazeReduceSpeedOfLight is now a "Hardened" calibration function. */
+func BlazeReduceSpeedOfLight(frame *internal.BlazeKernelFrame) uint64 {
+	frame.Reset()
+	frame.WithDim(1, 0, 0)
+
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_SpeedOfLight, frame, core.DTypeNone, core.DTypeNone) {
+		panic("dispatch failed")
+	}
+
+	return frame.Dim[0]
+}
+
+/*
+BlazeReduceMemoryThroughput measures memory throughput by performing sequential memory loads without computation.
+
+This function uses the SpeedOfLightTest_Throughput assembly kernel which loads memory
+into AVX2 registers without performing any arithmetic operations, making it ideal for
+measuring raw memory bandwidth.
+
+Use cases:
+- Memory bandwidth benchmarking
+- Cache performance analysis
+- Memory subsystem stress testing
+
+Time complexity: O(n) - single pass through vector
+Space complexity: O(1) - no additional allocations
+
+Prerequisites:
+- Vector must be valid and initialized
+- SIMD dispatch must be initialized
+
+Edge cases:
+- Works with any numeric type
+- Requires AVX2 support for optimal performance
+- Panics if kernel dispatch fails
+*/
+func BlazeReduceMemoryThroughput[T foundation.Numeric](vector memcore.MarkRaw) {
+	data := memstruct.VectorDataPtrGet[T](vector)
+	capacity := memstruct.VectorCapacityGet[T](vector)
+
+	frame := internal.CurrentKernelFrame
+	frame.Reset().
+		WithDim(capacity, 0, 0).
+		WithBuffer(0, data, int64(memcore.SizeOf[T]())).
+		WithFlags(internal.Flag_Contiguous)
+
+	if memcore.IsAligned(data, 32) {
+		frame.Flags |= internal.Flag_Aligned32
+	}
+
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_SpeedOfLightThroughput, frame, core.DTypeNone, core.BlazeDTypeGet[T]()) {
+		panic("dispatch failed")
+	}
 }
