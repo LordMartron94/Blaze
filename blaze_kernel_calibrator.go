@@ -140,13 +140,16 @@ func RunCalibrationSuite(
 			runWorkload, runWorkload,
 			prepareGo, prepareASM,
 			cleanupGo, cleanupASM,
-			benchmarking.MeasureTime[CalibrationContext],
+			func(fn benchmarking.BenchFunction[CalibrationContext], data CalibrationContext, targetRuntime time.Duration) float64 {
+				return benchmarking.MeasureTimeAdaptive(fn, data, targetRuntime, false)
+			},
 			judge,
 			benchmarking.SearchConfig{
 				MinParam: 10,
 				MaxParam: 1_000_000,
-				Samples:  100,
+				Samples:  40,
 			},
+			500*time.Microsecond,
 		)
 
 		// D. Save & Print
