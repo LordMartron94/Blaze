@@ -21,17 +21,20 @@ Ultra-fast numeric computation library built on manual memory management.
 Operations that apply a scalar value to each element of a vector or matrix.
 
 **Vector Operations:**
-- `BlazeScalarVectorAdd` / `BlazeScalarVectorAddF32` / `BlazeScalarVectorAddF64`
-- `BlazeScalarVectorSubtract` / `BlazeScalarVectorSubtractF32` / `BlazeScalarVectorSubtractF64`
-- `BlazeScalarVectorMultiply` / `BlazeScalarVectorMultiplyF32` / `BlazeScalarVectorMultiplyF64`
-- `BlazeScalarVectorDivide` / `BlazeScalarVectorDivideF32` / `BlazeScalarVectorDivideF64`
-- `BlazeScalarVectorSetAllSequence` - Fill vector with arithmetic sequence
+- `BlazeScalarVectorAddF32` / `BlazeScalarVectorAddF64` - Add scalar to each element
+- `BlazeScalarVectorSubtractF32` / `BlazeScalarVectorSubtractF64` - Subtract scalar from each element
+- `BlazeScalarVectorMultiplyF32` / `BlazeScalarVectorMultiplyF64` - Multiply each element by scalar
+- `BlazeScalarVectorDivideF32` / `BlazeScalarVectorDivideF64` - Divide each element by scalar
+- `BlazeScalarVectorSetAllSequence` - Fill vector with arithmetic sequence (value[i] = initial + i*step)
+- `BlazeScalarVectorClamp` - Clamp each element to [min, max] range (in-place)
 
 **Matrix Operations:**
-- `BlazeScalarMatrixAdd` / `BlazeScalarMatrixAddF32` / `BlazeScalarMatrixAddF64`
-- `BlazeScalarMatrixSubtract` / `BlazeScalarMatrixSubtractF32` / `BlazeScalarMatrixSubtractF64`
-- `BlazeScalarMatrixMultiply` / `BlazeScalarMatrixMultiplyF32` / `BlazeScalarMatrixMultiplyF64`
-- `BlazeScalarMatrixDivide` / `BlazeScalarMatrixDivideF32` / `BlazeScalarMatrixDivideF64`
+- `BlazeScalarMatrixAddF32` / `BlazeScalarMatrixAddF64` - Add scalar to each element
+- `BlazeScalarMatrixSubtractF32` / `BlazeScalarMatrixSubtractF64` - Subtract scalar from each element
+- `BlazeScalarMatrixMultiplyF32` / `BlazeScalarMatrixMultiplyF64` - Multiply each element by scalar
+- `BlazeScalarMatrixDivideF32` / `BlazeScalarMatrixDivideF64` - Divide each element by scalar
+- `BlazeScalarMatrixSetAllSequence` - Fill matrix with arithmetic sequence (value[i] = initial + i*step)
+- `BlazeScalarMatrixClamp` - Clamp each element to [min, max] range (in-place)
 
 **Example:**
 ```go
@@ -56,31 +59,34 @@ scalar.BlazeScalarVectorAddF64[float64](
 
 Operations performed element-by-element across multiple vectors or matrices.
 
+**Important:** Element-wise operations perform operations on corresponding elements at the same position. For example, element-wise matrix multiplication multiplies `A[i,j] * B[i,j]` for each position. This is different from standard matrix multiplication (see `blaze/structure`).
+
 **Vector Operations:**
-- `BlazeElementwiseVectorAdd` / `BlazeElementwiseVectorAddF32` / `BlazeElementwiseVectorAddF64`
-- `BlazeElementwiseVectorSubtract` / `BlazeElementwiseVectorSubtractF32` / `BlazeElementwiseVectorSubtractF64`
-- `BlazeElementwiseVectorMultiply` / `BlazeElementwiseVectorMultiplyF32` / `BlazeElementwiseVectorMultiplyF64`
-- `BlazeElementwiseVectorDivide` / `BlazeElementwiseVectorDivideF32` / `BlazeElementwiseVectorDivideF64`
+- `BlazeElementWiseVectorAddF32` / `BlazeElementWiseVectorAddF64` - Element-wise addition
+- `BlazeElementWiseVectorSubtractF32` / `BlazeElementWiseVectorSubtractF64` - Element-wise subtraction
+- `BlazeElementWiseVectorMultiplyF32` / `BlazeElementWiseVectorMultiplyF64` - Element-wise multiplication
+- `BlazeElementWiseVectorDivideF32` / `BlazeElementWiseVectorDivideF64` - Element-wise division
 
 **Matrix Operations:**
-- `BlazeElementwiseMatrixAdd` / `BlazeElementwiseMatrixAddF32` / `BlazeElementwiseMatrixAddF64`
-- `BlazeElementwiseMatrixSubtract` / `BlazeElementwiseMatrixSubtractF32` / `BlazeElementwiseMatrixSubtractF64`
-- `BlazeElementwiseMatrixMultiply` / `BlazeElementwiseMatrixMultiplyF32` / `BlazeElementwiseMatrixMultiplyF64`
-- `BlazeElementwiseMatrixDivide` / `BlazeElementwiseMatrixDivideF32` / `BlazeElementwiseMatrixDivideF64`
+- `BlazeElementWiseMatrixAddF32` / `BlazeElementWiseMatrixAddF64` - Element-wise addition (C[i,j] = A[i,j] + B[i,j])
+- `BlazeElementWiseMatrixSubtractF32` / `BlazeElementWiseMatrixSubtractF64` - Element-wise subtraction (C[i,j] = A[i,j] - B[i,j])
+- `BlazeElementWiseMatrixDivideF32` / `BlazeElementWiseMatrixDivideF64` - Element-wise division (C[i,j] = A[i,j] / B[i,j])
+
+**Note:** Standard matrix multiplication (C = A × B) and matrix-vector multiplication are in `blaze/structure`, not `blaze/elementwise`.
 
 **Example:**
 ```go
 import "blaze/elementwise"
 
 // Add two vectors element-wise: output = vec1 + vec2
-elementwise.BlazeElementwiseVectorAddF64[float64](
+elementwise.BlazeElementWiseVectorAddF64[float64](
     vec1Mark,        // first input
     vec2Mark,        // second input
     outputVectorMark, // destination
 )
 
-// Multiply two matrices element-wise: output = mat1 * mat2
-elementwise.BlazeElementwiseMatrixMultiplyF32[float32](
+// Element-wise matrix addition: output[i,j] = mat1[i,j] + mat2[i,j]
+elementwise.BlazeElementWiseMatrixAddF32[float32, float32](
     mat1Mark,
     mat2Mark,
     outputMatrixMark,
@@ -92,17 +98,21 @@ elementwise.BlazeElementwiseMatrixMultiplyF32[float32](
 Operations that reduce a collection of values to a single value.
 
 **Operations:**
-- `BlazeReduceVectorSum` - Sum all elements
+- `BlazeReduceVectorSumF32` / `BlazeReduceVectorSumF64` - Sum all elements
+- `BlazeReduceVectorSumSquaredF32` / `BlazeReduceVectorSumSquaredF64` - Sum of squares (for magnitude calculations)
 - `BlazeReduceVectorMin` - Find minimum value
 - `BlazeReduceVectorMax` - Find maximum value
-- `BlazeReduceVectorMean` - Calculate mean (average)
+- `BlazeReduceVectorMinMax` - Find both minimum and maximum values in a single pass
+- `BlazeReduceVectorMeanF32` / `BlazeReduceVectorMeanF64` - Calculate arithmetic mean (average)
+- `BlazeReduceDotProductF32` / `BlazeReduceDotProductF64` - Compute dot product between two vectors
+- `BlazeReduceCovarianceF32` / `BlazeReduceCovarianceF64` - Compute covariance between two vectors (requires pre-computed means)
 
 **Example:**
 ```go
 import "blaze/reduce"
 
 // Calculate sum of all elements
-sum := reduce.BlazeReduceVectorSum[float64](vectorMark)
+sum := reduce.BlazeReduceVectorSumF64[float64](vectorMark)
 
 // Find minimum value
 min := reduce.BlazeReduceVectorMin[int](vectorMark)
@@ -110,8 +120,19 @@ min := reduce.BlazeReduceVectorMin[int](vectorMark)
 // Find maximum value
 max := reduce.BlazeReduceVectorMax[float32](vectorMark)
 
+// Find both min and max in one pass
+min, max := reduce.BlazeReduceVectorMinMax[float64](vectorMark)
+
 // Calculate mean
-mean := reduce.BlazeReduceVectorMean[float64](vectorMark)
+mean := reduce.BlazeReduceVectorMeanF64[float64](vectorMark)
+
+// Calculate dot product
+dotProduct := reduce.BlazeReduceDotProductF64[float64, float64](vec1Mark, vec2Mark)
+
+// Calculate covariance (requires pre-computed means)
+meanA := reduce.BlazeReduceVectorMeanF64[float64](vecAMark)
+meanB := reduce.BlazeReduceVectorMeanF64[float64](vecBMark)
+covariance := reduce.BlazeReduceCovarianceF64[float64, float64](vecAMark, vecBMark, meanA, meanB)
 ```
 
 ### `blaze/compare`
@@ -119,22 +140,39 @@ mean := reduce.BlazeReduceVectorMean[float64](vectorMark)
 Comparison operations between vectors.
 
 **Operations:**
-- `BlazeCompareVectorEqual` - Element-wise equality comparison
-- `BlazeCompareVectorNotEqual` - Element-wise inequality comparison
-- `BlazeCompareVectorGreater` - Element-wise greater-than comparison
-- `BlazeCompareVectorGreaterEqual` - Element-wise greater-than-or-equal comparison
-- `BlazeCompareVectorLess` - Element-wise less-than comparison
-- `BlazeCompareVectorLessEqual` - Element-wise less-than-or-equal comparison
+- `BlazeCompareVectorEqualTo` - Element-wise equality comparison with tolerance
+- `BlazeCompareVectorGreaterThan` - Element-wise greater-than comparison
+- `BlazeCompareVectorGreaterThanOrEqualTo` - Element-wise greater-than-or-equal comparison
+- `BlazeCompareVectorSmallerThan` - Element-wise less-than comparison
+- `BlazeCompareVectorSmallerThanOrEqualTo` - Element-wise less-than-or-equal comparison
+- `BlazeCompareVectorSparseJaccardWeightedSimilarity` - Compute weighted Jaccard similarity for sparse vectors
 
 **Example:**
 ```go
 import "blaze/compare"
 
 // Compare two vectors element-wise, storing boolean results
-compare.BlazeCompareVectorGreater[int](
+compare.BlazeCompareVectorGreaterThan[int, int](
     vec1Mark,
     vec2Mark,
-    resultVectorMark, // stores bool results
+    resultArrayMark, // stores bool results (must be Array[bool])
+)
+
+// Compare with tolerance for floating-point equality
+compare.BlazeCompareVectorEqualTo[float64, float64](
+    vec1Mark,
+    vec2Mark,
+    resultArrayMark,
+    1e-9, // tolerance
+)
+
+// Compute weighted Jaccard similarity for sparse vectors
+similarity := compare.BlazeCompareVectorSparseJaccardWeightedSimilarity[int, int](
+    vecAMark,
+    vecBMark,
+    vecAWeights, // []float64
+    vecBWeights, // []float64
+    1e-6,        // tolerance for ID matching
 )
 ```
 
@@ -143,28 +181,33 @@ compare.BlazeCompareVectorGreater[int](
 Mathematical metrics and distance calculations.
 
 **Operations:**
-- `BlazeMetricVectorEuclideanDistance` - Calculate Euclidean distance between two vectors
-- `BlazeMetricVectorManhattanDistance` - Calculate Manhattan (L1) distance
-- `BlazeMetricVectorDotProduct` - Calculate dot product
+- `BlazeMetricVectorMagnitudeF32` / `BlazeMetricVectorMagnitudeF64` - Calculate vector magnitude (L2 norm)
+- `BlazeMetricVectorNormalizedF32` / `BlazeMetricVectorNormalizedF64` - Normalize vector to unit length (magnitude = 1)
 
 **Example:**
 ```go
 import "blaze/metric"
 
-// Calculate Euclidean distance
-distance := metric.BlazeMetricVectorEuclideanDistance[float64](vec1Mark, vec2Mark)
+// Calculate vector magnitude
+magnitude := metric.BlazeMetricVectorMagnitudeF64[float64](vectorMark)
 
-// Calculate dot product
-dotProduct := metric.BlazeMetricVectorDotProduct[float64](vec1Mark, vec2Mark)
+// Normalize vector to unit length
+metric.BlazeMetricVectorNormalizedF64[float64](
+    inputVectorMark,
+    outputVectorMark,
+)
 ```
 
 ### `blaze/structure`
 
-Matrix-specific structural operations.
+Matrix-specific structural operations for linear algebra.
 
 **Operations:**
 - `BlazeStructureMatrixTranspose` - Transpose a matrix
-- Additional matrix operations for linear algebra
+- `BlazeStructureMatrixMultiplyF32` / `BlazeStructureMatrixMultiplyF64` - Standard matrix multiplication (C = A × B, where C[i,j] = Σ(A[i,k] * B[k,j]))
+- `BlazeStructureMatrixMultiplyVectorF32` / `BlazeStructureMatrixMultiplyVectorF64` - Standard matrix-vector multiplication (result[i] = Σ(matrix[i,j] * vector[j]))
+
+**Important:** These are standard linear algebra operations, not element-wise operations. For element-wise operations (where operations are performed on corresponding elements), see `blaze/elementwise`.
 
 **Example:**
 ```go
@@ -175,17 +218,58 @@ structure.BlazeStructureMatrixTranspose[float64](
     inputMatrixMark,
     outputMatrixMark,
 )
+
+// Standard matrix multiplication: output = mat1 × mat2
+structure.BlazeStructureMatrixMultiplyF32[float32, float32](
+    mat1Mark,
+    mat2Mark,
+    outputMatrixMark,
+)
+
+// Standard matrix-vector multiplication: output = matrix * vector
+err := structure.BlazeStructureMatrixMultiplyVectorF64[float64, float64](
+    matrixMark,
+    vectorMark,
+    outputVectorMark,
+)
 ```
+
+### `blaze/math`
+
+Transcendental mathematical functions (numeric primitives).
+
+This package provides mathematical functions that are building blocks for numerical computation.
+These functions have no inherent domain-specific meaning and are pure calculus and numerical analysis primitives.
+
+**Operations:**
+- `BlazeMathBetaRegularizedIncompleteF32` / `BlazeMathBetaRegularizedIncompleteF64` - Regularized incomplete beta function I_x(a, b)
+- `BlazeMathLogGammaAbsF32` / `BlazeMathLogGammaAbsF64` - Natural logarithm of absolute value of Gamma function: ln(|Γ(x)|)
+- `BlazeMathGammaF32` / `BlazeMathGammaF64` - Gamma function: Γ(x)
+
+**Example:**
+```go
+import "blaze/math"
+
+// Compute I_0.5(2.0, 3.0) - regularized incomplete beta function
+result := math.BlazeMathBetaRegularizedIncompleteF64(0.5, 2.0, 3.0)
+
+// Compute ln(|Γ(5.0)|) - log gamma
+logGamma := math.BlazeMathLogGammaAbsF64(5.0)
+
+// Compute Γ(5.0) - gamma function
+gamma := math.BlazeMathGammaF64(5.0)
+```
+
+**Note:** These numeric primitives are used by higher-level libraries (e.g., `statarch`) for domain-specific operations, but the functions themselves remain domain-agnostic.
 
 ## Precision Variants
 
-Many operations provide three variants:
+Many operations provide precision variants:
 
-1. **Generic** (e.g., `BlazeScalarVectorAdd`): Uses the input type's precision
-2. **F32** (e.g., `BlazeScalarVectorAddF32`): Forces `float32` precision internally
-3. **F64** (e.g., `BlazeScalarVectorAddF64`): Forces `float64` precision internally
+1. **F32** (e.g., `BlazeScalarVectorAddF32`): Forces `float32` precision internally
+2. **F64** (e.g., `BlazeScalarVectorAddF64`): Forces `float64` precision internally
 
-Use F32/F64 variants when you need consistent precision regardless of input type, or when you want to control precision for performance/accuracy trade-offs.
+Use F32/F64 variants when you need consistent precision regardless of input type, or when you want to control precision for performance/accuracy trade-offs. Some operations (like min/max) work directly with the input type without precision variants.
 
 ## Complete Example
 
@@ -222,10 +306,10 @@ func main() {
     scalar.BlazeScalarVectorMultiplyF64[float64](vec1Mark, resultMark, 2.5)
 
     // Add vec1 and vec2 element-wise, store in result
-    elementwise.BlazeElementwiseVectorAddF64[float64](vec1Mark, vec2Mark, resultMark)
+    elementwise.BlazeElementWiseVectorAddF64[float64](vec1Mark, vec2Mark, resultMark)
 
     // Calculate sum of result
-    sum := reduce.BlazeReduceVectorSum[float64](resultMark)
+    sum := reduce.BlazeReduceVectorSumF64[float64](resultMark)
     _ = sum
 }
 ```

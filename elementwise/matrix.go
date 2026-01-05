@@ -2,14 +2,38 @@ package elementwise
 
 import (
 	"blaze/core"
-	"fmt"
 	"foundation"
 	"memcore"
 	"memstruct"
 )
 
-// BlazeElementWiseMatrixAddF32 adds the values of Matrix B to Matrix A, resulting in Matrix C at newMatrixAddr.
-// It does so in float32 precision.
+/*
+BlazeElementWiseMatrixAddF32 performs element-wise addition of two matrices in float32 precision.
+
+Computes: result[i,j] = matrixA[i,j] + matrixB[i,j] for all elements.
+
+Use cases:
+- Image processing (blending images, combining layers)
+- Signal processing (combining multi-channel signals)
+- Numerical simulations (combining matrices)
+- Data transformations
+
+Time complexity: O(m*n) - single pass through all matrix elements
+Space complexity: O(1) - only accumulator variables used
+
+Prerequisites:
+- Both input matrices must have the same dimensions (m×n)
+- Output matrix must have the same dimensions as inputs
+- All matrices must be valid and initialized
+
+Edge cases:
+- Works with any numeric type (int, float32, float64, etc.)
+- Type conversions occur during computation (input types → float32)
+- No overflow checking (relies on Go's numeric behavior)
+
+Note: This is element-wise addition, not standard matrix multiplication.
+For standard matrix multiplication, see blaze/structure.
+*/
 func BlazeElementWiseMatrixAddF32[T, U foundation.Numeric](
 	matrixAAddr, matrixBAddr, newMatrixAddr memcore.MarkRaw,
 ) {
@@ -18,8 +42,33 @@ func BlazeElementWiseMatrixAddF32[T, U foundation.Numeric](
 	}, core.BlazeDefaultStride)
 }
 
-// BlazeElementWiseMatrixAddF64 adds the values of Matrix B to Matrix A, resulting in Matrix C at newMatrixAddr.
-// It does so in float64 precision.
+/*
+BlazeElementWiseMatrixAddF64 performs element-wise addition of two matrices in float64 precision.
+
+Computes: result[i,j] = matrixA[i,j] + matrixB[i,j] for all elements.
+
+Use cases:
+- Image processing (blending images, combining layers)
+- Signal processing (combining multi-channel signals)
+- Numerical simulations (combining matrices)
+- Data transformations
+
+Time complexity: O(m*n) - single pass through all matrix elements
+Space complexity: O(1) - only accumulator variables used
+
+Prerequisites:
+- Both input matrices must have the same dimensions (m×n)
+- Output matrix must have the same dimensions as inputs
+- All matrices must be valid and initialized
+
+Edge cases:
+- Works with any numeric type (int, float32, float64, etc.)
+- Type conversions occur during computation (input types → float64)
+- No overflow checking (relies on Go's numeric behavior)
+
+Note: This is element-wise addition, not standard matrix multiplication.
+For standard matrix multiplication, see blaze/structure.
+*/
 func BlazeElementWiseMatrixAddF64[T, U foundation.Numeric](
 	matrixAAddr, matrixBAddr, newMatrixAddr memcore.MarkRaw,
 ) {
@@ -28,8 +77,33 @@ func BlazeElementWiseMatrixAddF64[T, U foundation.Numeric](
 	}, core.BlazeDefaultStride)
 }
 
-// BlazeElementWiseMatrixSubtractF32 subtracts the values of Matrix B from Matrix A, resulting in Matrix C at newMatrixAddr.
-// It does so in float32 precision.
+/*
+BlazeElementWiseMatrixSubtractF32 performs element-wise subtraction of two matrices in float32 precision.
+
+Computes: result[i,j] = matrixA[i,j] - matrixB[i,j] for all elements.
+
+Use cases:
+- Image processing (subtracting backgrounds, difference images)
+- Signal processing (difference between signals)
+- Numerical simulations (computing differences)
+- Error calculations
+
+Time complexity: O(m*n) - single pass through all matrix elements
+Space complexity: O(1) - only accumulator variables used
+
+Prerequisites:
+- Both input matrices must have the same dimensions (m×n)
+- Output matrix must have the same dimensions as inputs
+- All matrices must be valid and initialized
+
+Edge cases:
+- Works with any numeric type (int, float32, float64, etc.)
+- Type conversions occur during computation (input types → float32)
+- No overflow checking (relies on Go's numeric behavior)
+
+Note: This is element-wise subtraction, not standard matrix multiplication.
+For standard matrix multiplication, see blaze/structure.
+*/
 func BlazeElementWiseMatrixSubtractF32[T, U foundation.Numeric](
 	matrixAAddr, matrixBAddr, newMatrixAddr memcore.MarkRaw,
 ) {
@@ -38,8 +112,33 @@ func BlazeElementWiseMatrixSubtractF32[T, U foundation.Numeric](
 	}, core.BlazeDefaultStride)
 }
 
-// BlazeElementWiseMatrixSubtractF64 subtracts the values of Matrix B from Matrix A, resulting in Matrix C at newMatrixAddr.
-// It does so in float364precision.
+/*
+BlazeElementWiseMatrixSubtractF64 performs element-wise subtraction of two matrices in float64 precision.
+
+Computes: result[i,j] = matrixA[i,j] - matrixB[i,j] for all elements.
+
+Use cases:
+- Image processing (subtracting backgrounds, difference images)
+- Signal processing (difference between signals)
+- Numerical simulations (computing differences)
+- Error calculations
+
+Time complexity: O(m*n) - single pass through all matrix elements
+Space complexity: O(1) - only accumulator variables used
+
+Prerequisites:
+- Both input matrices must have the same dimensions (m×n)
+- Output matrix must have the same dimensions as inputs
+- All matrices must be valid and initialized
+
+Edge cases:
+- Works with any numeric type (int, float32, float64, etc.)
+- Type conversions occur during computation (input types → float64)
+- No overflow checking (relies on Go's numeric behavior)
+
+Note: This is element-wise subtraction, not standard matrix multiplication.
+For standard matrix multiplication, see blaze/structure.
+*/
 func BlazeElementWiseMatrixSubtractF64[T, U foundation.Numeric](
 	matrixAAddr, matrixBAddr, newMatrixAddr memcore.MarkRaw,
 ) {
@@ -48,8 +147,33 @@ func BlazeElementWiseMatrixSubtractF64[T, U foundation.Numeric](
 	}, core.BlazeDefaultStride)
 }
 
-// BlazeElementWiseMatrixMultiplyF32 multiplies the values of Matrix A by Matrix B, resulting in Matrix C at newMatrixAddr.
-// It does so in float32 precision.
+/*
+BlazeElementWiseMatrixMultiplyF32 performs element-wise multiplication of two matrices in float32 precision.
+
+Computes: result[i,j] = matrixA[i,j] * matrixB[i,j] for all elements.
+
+Use cases:
+- Image processing (masking, blending, filtering)
+- Signal processing (modulation, element-wise filtering)
+- Numerical simulations (element-wise scaling)
+- Weighted operations
+
+Time complexity: O(m*n) - single pass through all matrix elements
+Space complexity: O(1) - only accumulator variables used
+
+Prerequisites:
+- Both input matrices must have the same dimensions (m×n)
+- Output matrix must have the same dimensions as inputs
+- All matrices must be valid and initialized
+
+Edge cases:
+- Works with any numeric type (int, float32, float64, etc.)
+- Type conversions occur during computation (input types → float32)
+- No overflow checking (relies on Go's numeric behavior)
+
+Note: This is element-wise multiplication (Hadamard product), not standard matrix multiplication.
+For standard matrix multiplication (C = A × B), see blaze/structure.
+*/
 func BlazeElementWiseMatrixMultiplyF32[T, U foundation.Numeric](
 	matrixAAddr, matrixBAddr, newMatrixAddr memcore.MarkRaw,
 ) {
@@ -58,8 +182,33 @@ func BlazeElementWiseMatrixMultiplyF32[T, U foundation.Numeric](
 	}, core.BlazeDefaultStride)
 }
 
-// BlazeElementWiseMatrixMultiplyF64 multiplies the values of Matrix A by Matrix B, resulting in Matrix C at newMatrixAddr.
-// It does so in float64 precision.
+/*
+BlazeElementWiseMatrixMultiplyF64 performs element-wise multiplication of two matrices in float64 precision.
+
+Computes: result[i,j] = matrixA[i,j] * matrixB[i,j] for all elements.
+
+Use cases:
+- Image processing (masking, blending, filtering)
+- Signal processing (modulation, element-wise filtering)
+- Numerical simulations (element-wise scaling)
+- Weighted operations
+
+Time complexity: O(m*n) - single pass through all matrix elements
+Space complexity: O(1) - only accumulator variables used
+
+Prerequisites:
+- Both input matrices must have the same dimensions (m×n)
+- Output matrix must have the same dimensions as inputs
+- All matrices must be valid and initialized
+
+Edge cases:
+- Works with any numeric type (int, float32, float64, etc.)
+- Type conversions occur during computation (input types → float64)
+- No overflow checking (relies on Go's numeric behavior)
+
+Note: This is element-wise multiplication (Hadamard product), not standard matrix multiplication.
+For standard matrix multiplication (C = A × B), see blaze/structure.
+*/
 func BlazeElementWiseMatrixMultiplyF64[T, U foundation.Numeric](
 	matrixAAddr, matrixBAddr, newMatrixAddr memcore.MarkRaw,
 ) {
@@ -68,8 +217,34 @@ func BlazeElementWiseMatrixMultiplyF64[T, U foundation.Numeric](
 	}, core.BlazeDefaultStride)
 }
 
-// BlazeElementWiseMatrixDivideF32 divides the values of Matrix A by Matrix B, resulting in Matrix C at newMatrixAddr.
-// It does so in float32 precision.
+/*
+BlazeElementWiseMatrixDivideF32 performs element-wise division of two matrices in float32 precision.
+
+Computes: result[i,j] = matrixA[i,j] / matrixB[i,j] for all elements.
+
+Use cases:
+- Image processing (ratio images, normalization)
+- Signal processing (normalization, deconvolution)
+- Numerical simulations (element-wise scaling)
+- Normalization operations
+
+Time complexity: O(m*n) - single pass through all matrix elements
+Space complexity: O(1) - only accumulator variables used
+
+Prerequisites:
+- Both input matrices must have the same dimensions (m×n)
+- Output matrix must have the same dimensions as inputs
+- All matrices must be valid and initialized
+
+Edge cases:
+- Works with any numeric type (int, float32, float64, etc.)
+- Type conversions occur during computation (input types → float32)
+- Division by zero results in ±Inf or NaN (Go's standard behavior)
+- No overflow checking (relies on Go's numeric behavior)
+
+Note: This is element-wise division, not standard matrix multiplication.
+For standard matrix multiplication, see blaze/structure.
+*/
 func BlazeElementWiseMatrixDivideF32[T, U foundation.Numeric](
 	matrixAAddr, matrixBAddr, newMatrixAddr memcore.MarkRaw,
 ) {
@@ -78,88 +253,38 @@ func BlazeElementWiseMatrixDivideF32[T, U foundation.Numeric](
 	}, core.BlazeDefaultStride)
 }
 
-// BlazeElementWiseMatrixDivideF64 divides the values of Matrix A by Matrix B, resulting in Matrix C at newMatrixAddr.
-// It does so in float64 precision.
+/*
+BlazeElementWiseMatrixDivideF64 performs element-wise division of two matrices in float64 precision.
+
+Computes: result[i,j] = matrixA[i,j] / matrixB[i,j] for all elements.
+
+Use cases:
+- Image processing (ratio images, normalization)
+- Signal processing (normalization, deconvolution)
+- Numerical simulations (element-wise scaling)
+- Normalization operations
+
+Time complexity: O(m*n) - single pass through all matrix elements
+Space complexity: O(1) - only accumulator variables used
+
+Prerequisites:
+- Both input matrices must have the same dimensions (m×n)
+- Output matrix must have the same dimensions as inputs
+- All matrices must be valid and initialized
+
+Edge cases:
+- Works with any numeric type (int, float32, float64, etc.)
+- Type conversions occur during computation (input types → float64)
+- Division by zero results in ±Inf or NaN (Go's standard behavior)
+- No overflow checking (relies on Go's numeric behavior)
+
+Note: This is element-wise division, not standard matrix multiplication.
+For standard matrix multiplication, see blaze/structure.
+*/
 func BlazeElementWiseMatrixDivideF64[T, U foundation.Numeric](
 	matrixAAddr, matrixBAddr, newMatrixAddr memcore.MarkRaw,
 ) {
 	memstruct.MatrixBinaryExecute(matrixAAddr, matrixBAddr, newMatrixAddr, func(a T, b U) float64 {
 		return float64(a) / float64(b)
 	}, core.BlazeDefaultStride)
-}
-
-// BlazeElementWiseMatrixMultiplyVectorF32 multiplies each row of Matrix A element-wise with Vector B,
-// then sums the results, producing Vector C at newVectorAddr.
-// This is standard matrix-vector multiplication: result[i] = sum(matrix[i,j] * vector[j] for j in 0..cols)
-// It does so in float32 precision.
-func BlazeElementWiseMatrixMultiplyVectorF32[T, U foundation.Numeric](
-	matrixAddr, vectorAddr, newVectorAddr memcore.MarkRaw,
-) error {
-	rows := memstruct.MatrixRowsGet[T](matrixAddr)
-	cols := memstruct.MatrixColsGet[T](matrixAddr)
-	vectorLength := memstruct.VectorCapacityGet[U](vectorAddr)
-	outputLength := memstruct.VectorCapacityGet[float32](newVectorAddr)
-
-	if cols != vectorLength {
-		return fmt.Errorf("matrix column count (%d) must match vector capacity (%d)", cols, vectorLength)
-	}
-
-	if rows != outputLength {
-		return fmt.Errorf("matrix row count (%d) must match output vector capacity (%d)", rows, outputLength)
-	}
-
-	// For each row in the matrix, compute dot product with the vector
-	for row := uint64(0); row < rows; row++ {
-		sum := float32(0)
-
-		// Compute dot product: sum of matrix[row, col] * vector[col] for all cols
-		for col := uint64(0); col < cols; col++ {
-			matrixVal := memstruct.MatrixItemGetAtUnsafe[T](matrixAddr, row, col)
-			vectorVal := memstruct.VectorItemGetAtUnsafe[U](vectorAddr, col)
-			sum += float32(matrixVal) * float32(vectorVal)
-		}
-
-		// Store result in output vector
-		memstruct.VectorSetAtUnsafe(newVectorAddr, row, sum)
-	}
-
-	return nil
-}
-
-// BlazeElementWiseMatrixMultiplyVectorF64 multiplies each row of Matrix A element-wise with Vector B,
-// then sums the results, producing Vector C at newVectorAddr.
-// This is standard matrix-vector multiplication: result[i] = sum(matrix[i,j] * vector[j] for j in 0..cols)
-// It does so in float64 precision.
-func BlazeElementWiseMatrixMultiplyVectorF64[T, U foundation.Numeric](
-	matrixAddr, vectorAddr, newVectorAddr memcore.MarkRaw,
-) error {
-	rows := memstruct.MatrixRowsGet[T](matrixAddr)
-	cols := memstruct.MatrixColsGet[T](matrixAddr)
-	vectorLength := memstruct.VectorCapacityGet[U](vectorAddr)
-	outputLength := memstruct.VectorCapacityGet[float64](newVectorAddr)
-
-	if cols != vectorLength {
-		return fmt.Errorf("matrix column count (%d) must match vector capacity (%d)", cols, vectorLength)
-	}
-
-	if rows != outputLength {
-		return fmt.Errorf("matrix row count (%d) must match output vector capacity (%d)", rows, outputLength)
-	}
-
-	// For each row in the matrix, compute dot product with the vector
-	for row := uint64(0); row < rows; row++ {
-		sum := float64(0)
-
-		// Compute dot product: sum of matrix[row, col] * vector[col] for all cols
-		for col := uint64(0); col < cols; col++ {
-			matrixVal := memstruct.MatrixItemGetAtUnsafe[T](matrixAddr, row, col)
-			vectorVal := memstruct.VectorItemGetAtUnsafe[U](vectorAddr, col)
-			sum += float64(matrixVal) * float64(vectorVal)
-		}
-
-		// Store result in output vector
-		memstruct.VectorSetAtUnsafe(newVectorAddr, row, sum)
-	}
-
-	return nil
 }
