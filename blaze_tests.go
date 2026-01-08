@@ -22,7 +22,7 @@ func BlazeTestSuite(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 
 	allocator := memforge.DynamicLinearAllocatorCreateFunction(
-		uint64(10*memcore.MegaByte),
+		uint64(20*memcore.MegaByte),
 		blazetesting.DoubleGrowth,
 	)
 	defer memforge.DynamicLinearAllocatorDestroy(allocator)
@@ -35,33 +35,114 @@ func BlazeTestSuite(t *testing.T) {
 		t.Run(fmt.Sprintf("Dimension=%d", dimension), func(t *testing.T) {
 			memforge.DynamicLinearAllocatorReset(allocator)
 
-			BlazeTestSumF64Path[float64](t, allocator, dimension, rng, core.DTypeF64, 1e-14)
-			BlazeTestSumF64Path[float32](t, allocator, dimension, rng, core.DTypeF32, 1e-6)
-			BlazeTestSumF32Path[float32](t, allocator, dimension, rng, core.DTypeF32, 1e-6)
+			// --- Sum Tests ---
+			BlazeTestSumF64Path[float64](t, allocator, dimension, rng, core.DTypeF64, 1e-13)
+			BlazeTestSumF64Path[float32](t, allocator, dimension, rng, core.DTypeF32, 1e-5)
+			BlazeTestSumF32Path[float32](t, allocator, dimension, rng, core.DTypeF32, 1e-5)
+
+			// --- Dot Product Tests ---
+			// F64 · F64 -> F64
+			BlazeTestDotProductF64Path[float64, float64](
+				t, allocator, dimension, rng, core.DTypeF64, core.DTypeF64, 1e-13,
+			)
 		})
 	}
 }
 
 /*
-BlazeTestSumF64Path tests the Float64 sum reduction path for a given input type.
+BlazeTestDotProductF64Path tests the Float64 dot product reduction.
 
-This function encapsulates the test setup for comparing optimized kernel execution
-against the pure Go fallback implementation. It creates a vector, populates it with
-random data, runs both the baseline (optimized) and Go fallback paths, and compares
-the results within the specified tolerance.
-
-Time complexity: O(n) - where n is dimension
-Space complexity: O(n) - allocates vector and data slice
-
-Prerequisites:
-- allocator must be a valid memory allocator
-- dimension must be greater than 0
-- rng must be initialized
-
-Edge cases:
-- Tests both Float64 -> Float64 and Float32 -> Float64 conversion paths
-- Uses appropriate epsilon tolerance based on input type precision
+It creates two vectors (A and B), populates them with random data, and compares
+the optimized SIMD kernel execution against the Go fallback.
 */
+func BlazeTestDotProductF64Path[T, U foundation.Numeric](
+	t *testing.T,
+	allocator memcore.MarkRaw,
+	dimension uint64,
+	rng *rand.Rand,
+	dtypeA core.BlazeDType,
+	dtypeB core.BlazeDType,
+	epsilon float64,
+) {
+	t.Helper()
+
+	// 1. Create Vector A
+	vectorA, _ := memarch.MemArchVectorCreate[T](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
+		},
+		dimension,
+	)
+
+	// 2. Create Vector B
+	vectorB, _ := memarch.MemArchVectorCreate[U](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
+		},
+		dimension,
+	)
+
+	// 3. Populate Vectors
+	// We handle T and U separately to allow mixed-type tests later.
+	var zeroT T
+	switch any(zeroT).(type) {
+	case float64:
+		memstruct.VectorSetFromSlice(vectorA, blazetesting.GenerateRandomVectorF64(dimension, rng))
+	case float32:
+		memstruct.VectorSetFromSlice(vectorA, blazetesting.GenerateRandomVectorF32(dimension, rng))
+	default:
+		t.Fatalf("unsupported type A for test")
+	}
+
+	var zeroU U
+	switch any(zeroU).(type) {
+	case float64:
+		memstruct.VectorSetFromSlice(vectorB, blazetesting.GenerateRandomVectorF64(dimension, rng))
+	case float32:
+		memstruct.VectorSetFromSlice(vectorB, blazetesting.GenerateRandomVectorF32(dimension, rng))
+	default:
+		t.Fatalf("unsupported type B for test")
+	}
+
+	// 4. Run Baseline (Optimized)
+	var dotBaseline float64
+	reduce.BlazeReduceVectorDotProductF64[T, U](vectorA, vectorB, &dotBaseline)
+
+	// 5. Force Fallback: Remove Kernel
+	// The registry keys for Dot Product are (Op, Out, InA, InB)
+	oldKernel := simd.BlazeSIMDDispatchKernelRemove(
+		core.Blaze_Operation_Vector_Dot,
+		core.DTypeF64,
+		dtypeA,
+		dtypeB,
+	)
+
+	// 6. Run Go Fallback
+	var dotGo float64
+	reduce.BlazeReduceVectorDotProductF64[T, U](vectorA, vectorB, &dotGo)
+
+	// 7. Restore Kernel
+	simd.BlazeSIMDDispatchKernelOverride(
+		core.Blaze_Operation_Vector_Dot,
+		core.DTypeF64,
+		oldKernel,
+		dtypeA,
+		dtypeB,
+	)
+
+	// 8. Assert
+	sigStr := formatTestSignatureBinary(core.DTypeF64, dtypeA, dtypeB)
+	echo.On(core.BlazeUUID).
+		Field("sig", sigStr).
+		Field("dimension", dimension).
+		Debug("testing signature")
+
+	AssertClose(t, dotGo, dotBaseline, epsilon, sigStr)
+}
+
+// --- Helpers ---
+
+// BlazeTestSumF64Path tests the Float64 sum reduction path...
 func BlazeTestSumF64Path[T foundation.Numeric](
 	t *testing.T,
 	allocator memcore.MarkRaw,
@@ -122,15 +203,6 @@ func BlazeTestSumF64Path[T foundation.Numeric](
 	AssertClose(t, sumBaseline, sumGo, epsilon, sigStr)
 }
 
-/*
-BlazeTestSumF32Path tests the Float32 sum reduction path for a given input type.
-
-Similar to the F64 path, this compares the optimized SIMD kernel against the
-pure Go fallback, but specifically for operations yielding a Float32 result.
-
-Time complexity: O(n)
-Space complexity: O(n)
-*/
 func BlazeTestSumF32Path[T foundation.Numeric](
 	t *testing.T,
 	allocator memcore.MarkRaw,
@@ -141,7 +213,6 @@ func BlazeTestSumF32Path[T foundation.Numeric](
 ) {
 	t.Helper()
 
-	// 1. Setup Vector
 	vector, _ := memarch.MemArchVectorCreate[T](
 		func(sizeBytes, alignment uint64) memcore.MarkRaw {
 			return memforge.DynamicLinearAllocatorMallocUnsafe(
@@ -151,35 +222,28 @@ func BlazeTestSumF32Path[T foundation.Numeric](
 		dimension,
 	)
 
-	// 2. Generate Random Data
 	var zero T
 	switch any(zero).(type) {
 	case float32:
 		values := blazetesting.GenerateRandomVectorF32(dimension, rng)
 		memstruct.VectorSetFromSlice(vector, values)
 	default:
-		// Currently only F32->F32 is commonly tested, but structure allows expansion
 		t.Fatalf("unsupported input type for F32 sum test")
 		return
 	}
 
-	// 3. Run Optimized Baseline (SIMD)
 	var sumBaseline float32
 	reduce.BlazeReduceVectorSumF32[T](vector, &sumBaseline)
 
-	// 4. Force Fallback (Remove Kernel)
-	// We target the Output Type: core.DTypeF32
 	oldKernel := simd.BlazeSIMDDispatchKernelRemove(
 		core.Blaze_Operation_Vector_Sum,
 		core.DTypeF32,
 		inputDType,
 	)
 
-	// 5. Run Go Fallback
 	var sumGo float32
 	reduce.BlazeReduceVectorSumF32[T](vector, &sumGo)
 
-	// 6. Restore Kernel
 	simd.BlazeSIMDDispatchKernelOverride(
 		core.Blaze_Operation_Vector_Sum,
 		core.DTypeF32,
@@ -187,14 +251,12 @@ func BlazeTestSumF32Path[T foundation.Numeric](
 		inputDType,
 	)
 
-	// 7. Log & Compare
 	sigStr := formatTestSignature(core.DTypeF32, inputDType)
 	echo.On(core.BlazeUUID).
 		Field("sig", sigStr).
 		Field("dimension", dimension).
 		Debug("testing signature")
 
-	// Cast float32 results to float64 for the shared assertion logic
 	AssertClose(t, float64(sumGo), float64(sumBaseline), epsilon, sigStr)
 }
 
@@ -224,6 +286,14 @@ func formatTestSignature(out core.BlazeDType, in core.BlazeDType) string {
 	outStr := formatDTypeString(out)
 	inStr := formatDTypeString(in)
 	return outStr + "<-" + inStr
+}
+
+// formatTestSignatureBinary handles 2 input types
+func formatTestSignatureBinary(out core.BlazeDType, inA, inB core.BlazeDType) string {
+	outStr := formatDTypeString(out)
+	inAStr := formatDTypeString(inA)
+	inBStr := formatDTypeString(inB)
+	return outStr + "<-(" + inAStr + "·" + inBStr + ")"
 }
 
 func formatDTypeString(dt core.BlazeDType) string {

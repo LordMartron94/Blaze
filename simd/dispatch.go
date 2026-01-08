@@ -332,6 +332,8 @@ func formatOperationName(op core.BlazeOperationID) string {
 	switch op {
 	case core.Blaze_Operation_Vector_Sum:
 		return "Vector_Sum"
+	case core.Blaze_Operation_Vector_Dot:
+		return "Vector_Dot_Product"
 	default:
 		return "Unknown"
 	}

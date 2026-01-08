@@ -9,6 +9,8 @@ import (
 
 func init() {
 
+	// --- SUM ---
+
 	// F64->F64
 	internal.Register(internal.KernelManifest{
 		// ---- Identity ----
@@ -59,6 +61,26 @@ func init() {
 
 		// ---- Constraints ----
 		RequiredISA:   internal.ISA_AVX2,
+		RequiredFlags: internal.Flag_Aligned32 | internal.Flag_Contiguous,
+
+		// ---- Strategy ----
+		Priority: 20,
+		MinN:     0,
+	})
+
+	// --- DOT PRODUCT ---
+
+	internal.Register(internal.KernelManifest{
+		// ---- Identity ----
+		Op:     core.Blaze_Operation_Vector_Dot,
+		Inputs: []core.BlazeDType{core.DTypeF64, core.DTypeF64},
+		Output: core.DTypeF64,
+
+		// ---- Implementation ----
+		Func: DotProductF64F64o_AVX2,
+
+		// ---- Constraints ----
+		RequiredISA:   internal.ISA_AVX2 | internal.ISA_FMA3,
 		RequiredFlags: internal.Flag_Aligned32 | internal.Flag_Contiguous,
 
 		// ---- Strategy ----
@@ -118,3 +140,6 @@ func SpeedOfLightTest(frame *internal.BlazeKernelFrame)
 
 //go:noescape
 func SpeedOfLightTest_Throughput(frame *internal.BlazeKernelFrame)
+
+//go:noescape
+func DotProductF64F64o_AVX2(frame *internal.BlazeKernelFrame)

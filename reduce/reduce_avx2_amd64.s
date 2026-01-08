@@ -281,3 +281,115 @@ reduce:
     MOVSS X0, (DX)
     VZEROUPPER
     RET
+
+TEXT ·DotProductF64F64o_AVX2(SB), NOSPLIT, $0-8
+    MOVQ frame+0(FP), DI
+
+    // 1. Load Context
+    MOVQ FRAME_DIM0(DI), BX      // BX = N (Count)
+    MOVQ FRAME_BUF0_PTR(DI), SI  // SI = Ptr A
+    MOVQ FRAME_BUF1_PTR(DI), DX  // DX = Ptr B
+    MOVQ FRAME_RET0(DI), CX      // CX = Return Ptr
+
+    // 2. Initialize 8 Accumulators (Y0 - Y7)
+    VPXOR Y0, Y0, Y0
+    VPXOR Y1, Y1, Y1
+    VPXOR Y2, Y2, Y2
+    VPXOR Y3, Y3, Y3
+    VPXOR Y4, Y4, Y4
+    VPXOR Y5, Y5, Y5
+    VPXOR Y6, Y6, Y6
+    VPXOR Y7, Y7, Y7
+
+unrolled_loop:
+    CMPQ BX, $32
+    JL middle_loop
+
+    PREFETCHT0 512(SI) 
+    PREFETCHT0 512(DX)
+
+    // Block 0-3
+    VMOVUPD 0(SI), Y8
+    VFMADD231PD 0(DX), Y8, Y0  
+
+    // Block 4-7
+    VMOVUPD 32(SI), Y9
+    VFMADD231PD 32(DX), Y9, Y1
+
+    // Block 8-11
+    VMOVUPD 64(SI), Y10
+    VFMADD231PD 64(DX), Y10, Y2
+
+    // Block 12-15
+    VMOVUPD 96(SI), Y11
+    VFMADD231PD 96(DX), Y11, Y3
+
+    // Block 16-19
+    VMOVUPD 128(SI), Y12
+    VFMADD231PD 128(DX), Y12, Y4
+
+    // Block 20-23
+    VMOVUPD 160(SI), Y13
+    VFMADD231PD 160(DX), Y13, Y5
+
+    // Block 24-27
+    VMOVUPD 192(SI), Y14
+    VFMADD231PD 192(DX), Y14, Y6
+
+    // Block 28-31
+    VMOVUPD 224(SI), Y15
+    VFMADD231PD 224(DX), Y15, Y7
+
+    ADDQ $256, SI 
+    ADDQ $256, DX
+    SUBQ $32, BX
+    JMP unrolled_loop
+
+middle_loop:
+    CMPQ BX, $4
+    JL merge_accumulators
+
+    VMOVUPD 0(SI), Y8
+    VFMADD231PD 0(DX), Y8, Y0
+
+    ADDQ $32, SI
+    ADDQ $32, DX
+    SUBQ $4, BX
+    JMP middle_loop
+
+merge_accumulators:
+    // Fold partial sums Y1..Y7 into Y0
+    VADDPD Y1, Y0, Y0
+    VADDPD Y3, Y2, Y2
+    VADDPD Y5, Y4, Y4
+    VADDPD Y7, Y6, Y6
+    
+    VADDPD Y2, Y0, Y0
+    VADDPD Y6, Y4, Y4
+    
+    VADDPD Y4, Y0, Y0 // Y0 now holds [SumA, SumB, SumC, SumD]
+
+    VEXTRACTF128 $1, Y0, X1  // X1 = [D, C]
+    VADDPD X1, X0, X0        // X0 = [D+B, C+A] (Result in lower 128 bits)
+    
+    MOVHLPS X0, X1           // X1 = [?, D+B]
+    ADDSD X1, X0             // X0 = (D+B) + (C+A) (Final Scalar in X0)
+
+tail:
+    CMPQ BX, $0
+    JE done
+
+    MOVSD 0(SI), X8   // Load Scalar A
+    MOVSD 0(DX), X9   // Load Scalar B
+    
+    VFMADD231SD X9, X8, X0 
+
+    ADDQ $8, SI
+    ADDQ $8, DX
+    DECQ BX
+    JMP tail
+
+done:
+    MOVSD X0, (CX)
+    VZEROUPPER
+    RET

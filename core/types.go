@@ -9,6 +9,7 @@ const (
 	Blaze_Operation_Vector_Sum BlazeOperationID = iota
 	Blaze_Operation_SpeedOfLight
 	Blaze_Operation_SpeedOfLightThroughput
+	Blaze_Operation_Vector_Dot
 
 	/* BLAZE_OPERATION_COUNT is a constant representing how manu operations are supported.
 

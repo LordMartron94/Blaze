@@ -561,7 +561,7 @@ func blazeReduceVectorSumSquaredF64Go[T foundation.Numeric](
 }
 
 /*
-BlazeReduceDotProductF32 computes the dot product (inner product) of two vectors in float32 precision.
+BlazeReduceVectorDotProductF32 computes the dot product (inner product) of two vectors in float32 precision.
 
 Computes: dot = Σ(vectorA[i] * vectorB[i]) for all elements i.
 
@@ -588,7 +588,7 @@ Edge cases:
 - Potential precision loss for large values
 - No overflow checking (relies on Go's numeric behavior)
 */
-func BlazeReduceDotProductF32[T, U foundation.Numeric](aAddr, bAddr memcore.MarkRaw) float32 {
+func BlazeReduceVectorDotProductF32[T, U foundation.Numeric](aAddr, bAddr memcore.MarkRaw) float32 {
 	aCapacity := memstruct.VectorCapacityGet[T](aAddr)
 	bCapacity := memstruct.VectorCapacityGet[U](bAddr)
 
@@ -647,7 +647,7 @@ func blazeReduceDotProductF32Go[T, U foundation.Numeric](
 }
 
 /*
-BlazeReduceDotProductF64 computes the dot product (inner product) of two vectors in float64 precision.
+BlazeReduceVectorDotProductF64 computes the dot product (inner product) of two vectors in float64 precision.
 
 Computes: dot = Σ(vectorA[i] * vectorB[i]) for all elements i.
 
@@ -674,62 +674,75 @@ Edge cases:
 - Better precision than F32 variant for large values
 - No overflow checking (relies on Go's numeric behavior)
 */
-func BlazeReduceDotProductF64[T, U foundation.Numeric](aAddr, bAddr memcore.MarkRaw) float64 {
-	aCapacity := memstruct.VectorCapacityGet[T](aAddr)
-	bCapacity := memstruct.VectorCapacityGet[U](bAddr)
-
-	if aCapacity != bCapacity {
-		panic(fmt.Errorf("cannot compute dot product: capacity mismatch (a=%d, b=%d)",
-			aCapacity, bCapacity))
-	}
-
+func BlazeReduceVectorDotProductF64[T, U foundation.Numeric](aAddr, bAddr memcore.MarkRaw, output *float64) {
 	aData := memstruct.VectorDataPtrGet[T](aAddr)
 	bData := memstruct.VectorDataPtrGet[U](bAddr)
-	aSize := uintptr(memcore.SizeOf[T]())
-	bSize := uintptr(memcore.SizeOf[U]())
-	capacity := aCapacity
+	n := memstruct.VectorCapacityGet[T](aAddr)
 
-	return blazeReduceDotProductF64Go[T, U](aData, bData, aSize, bSize, capacity)
+	// Validation: Dot product requires equal lengths.
+	if n != memstruct.VectorCapacityGet[U](bAddr) {
+		panic(fmt.Errorf("dot product capacity mismatch: %d vs %d", n, memstruct.VectorCapacityGet[U](bAddr)))
+	}
+
+	frame := internal.CurrentKernelFrame
+	frame.Reset().
+		WithDim(n, 0, 0).
+		WithBuffer(0, aData, int64(memcore.SizeOf[T]())).
+		WithBuffer(1, bData, int64(memcore.SizeOf[U]())).
+		WithReturn(0, unsafe.Pointer(output)).
+		WithFlags(internal.Flag_Contiguous)
+
+	// Optimization: Check alignment for both buffers
+	if memcore.IsAligned(aData, 32) && memcore.IsAligned(bData, 32) {
+		frame.Flags |= internal.Flag_Aligned32
+	}
+
+	// Attempt SIMD execution; fallback to Go if unsupported
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_Vector_Dot, frame, core.DTypeF64, core.BlazeDTypeGet[T](), core.BlazeDTypeGet[U]()) {
+		blazeReduceDotProductF64Go[T, U](frame)
+	}
 }
 
 //go:inline
 func blazeReduceDotProductF64Go[T, U foundation.Numeric](
-	aData, bData unsafe.Pointer, aSize, bSize uintptr, capacity uint64,
-) float64 {
-	var dot float64
-	var i uint64
-
-	// Manually unrolled loop for stride 8
-	for ; i+7 < capacity; i += 8 {
-		a0 := float64(*(*T)(unsafe.Add(aData, uintptr(i+0)*aSize)))
-		a1 := float64(*(*T)(unsafe.Add(aData, uintptr(i+1)*aSize)))
-		a2 := float64(*(*T)(unsafe.Add(aData, uintptr(i+2)*aSize)))
-		a3 := float64(*(*T)(unsafe.Add(aData, uintptr(i+3)*aSize)))
-		a4 := float64(*(*T)(unsafe.Add(aData, uintptr(i+4)*aSize)))
-		a5 := float64(*(*T)(unsafe.Add(aData, uintptr(i+5)*aSize)))
-		a6 := float64(*(*T)(unsafe.Add(aData, uintptr(i+6)*aSize)))
-		a7 := float64(*(*T)(unsafe.Add(aData, uintptr(i+7)*aSize)))
-
-		b0 := float64(*(*U)(unsafe.Add(bData, uintptr(i+0)*bSize)))
-		b1 := float64(*(*U)(unsafe.Add(bData, uintptr(i+1)*bSize)))
-		b2 := float64(*(*U)(unsafe.Add(bData, uintptr(i+2)*bSize)))
-		b3 := float64(*(*U)(unsafe.Add(bData, uintptr(i+3)*bSize)))
-		b4 := float64(*(*U)(unsafe.Add(bData, uintptr(i+4)*bSize)))
-		b5 := float64(*(*U)(unsafe.Add(bData, uintptr(i+5)*bSize)))
-		b6 := float64(*(*U)(unsafe.Add(bData, uintptr(i+6)*bSize)))
-		b7 := float64(*(*U)(unsafe.Add(bData, uintptr(i+7)*bSize)))
-
-		dot += a0*b0 + a1*b1 + a2*b2 + a3*b3 + a4*b4 + a5*b5 + a6*b6 + a7*b7
+	frame *internal.BlazeKernelFrame,
+) {
+	n := frame.Dim[0]
+	if n == 0 {
+		return
 	}
 
-	// Handle remaining elements
-	for ; i < capacity; i++ {
-		a := float64(*(*T)(unsafe.Add(aData, uintptr(i)*aSize)))
-		b := float64(*(*U)(unsafe.Add(bData, uintptr(i)*bSize)))
-		dot += a * b
+	ptrA := frame.Buffers[0].Ptr
+	ptrB := frame.Buffers[1].Ptr
+	strideA := uintptr(frame.Buffers[0].Stride)
+	strideB := uintptr(frame.Buffers[1].Stride)
+
+	var dot0, dot1 float64
+	var i uintptr
+	nCnv := uintptr(n)
+
+	// Unrolled loop: 8 elements per iteration using dual accumulators
+	for ; i+7 < nCnv; i += 8 {
+		dot0 += float64(*(*T)(unsafe.Add(ptrA, (i+0)*strideA))) * float64(*(*U)(unsafe.Add(ptrB, (i+0)*strideB)))
+		dot1 += float64(*(*T)(unsafe.Add(ptrA, (i+1)*strideA))) * float64(*(*U)(unsafe.Add(ptrB, (i+1)*strideB)))
+		dot0 += float64(*(*T)(unsafe.Add(ptrA, (i+2)*strideA))) * float64(*(*U)(unsafe.Add(ptrB, (i+2)*strideB)))
+		dot1 += float64(*(*T)(unsafe.Add(ptrA, (i+3)*strideA))) * float64(*(*U)(unsafe.Add(ptrB, (i+3)*strideB)))
+		dot0 += float64(*(*T)(unsafe.Add(ptrA, (i+4)*strideA))) * float64(*(*U)(unsafe.Add(ptrB, (i+4)*strideB)))
+		dot1 += float64(*(*T)(unsafe.Add(ptrA, (i+5)*strideA))) * float64(*(*U)(unsafe.Add(ptrB, (i+5)*strideB)))
+		dot0 += float64(*(*T)(unsafe.Add(ptrA, (i+6)*strideA))) * float64(*(*U)(unsafe.Add(ptrB, (i+6)*strideB)))
+		dot1 += float64(*(*T)(unsafe.Add(ptrA, (i+7)*strideA))) * float64(*(*U)(unsafe.Add(ptrB, (i+7)*strideB)))
 	}
 
-	return dot
+	accum := dot0 + dot1
+
+	// Handle tail
+	for ; i < nCnv; i++ {
+		accum += float64(*(*T)(unsafe.Add(ptrA, i*strideA))) * float64(*(*U)(unsafe.Add(ptrB, i*strideB)))
+	}
+
+	if frame.Returns[0] != nil {
+		*(*float64)(frame.Returns[0]) = accum
+	}
 }
 
 /*
