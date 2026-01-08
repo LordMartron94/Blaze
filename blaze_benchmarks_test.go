@@ -45,7 +45,7 @@ func BenchmarkVectorSum(b *testing.B) {
 		core.DTypeF32, // F32 -> F64
 	)
 
-	// F32 Output Overrides (NEW)
+	// F32 Output Overrides
 	simd.BlazeSIMDDispatchOverrideRequirements(
 		core.Blaze_Operation_Vector_Sum,
 		core.DTypeF32,
@@ -72,7 +72,7 @@ func BenchmarkVectorSum(b *testing.B) {
 	)
 
 	// --- F32 Output Paths ---
-	// F32(in) -> F32(out) (NEW)
+	// F32(in) -> F32(out)
 	benchmarkVectorSumGeneric[float32](
 		b, dimensions, methods, "F32", "F32", core.DTypeF32,
 		func(v memcore.MarkRaw, res *float32) { reduce.BlazeReduceVectorSumF32[float32](v, res) },
@@ -85,7 +85,8 @@ func BenchmarkVectorDotProduct(b *testing.B) {
 	override := uint64(0)
 	var overrideFlags internal.Flags = 0
 
-	// Override requirements for F64 · F64 -> F64
+	// 1. Override requirements for all combos to ensure ASM runs
+	// F64 · F64 -> F64
 	simd.BlazeSIMDDispatchOverrideRequirements(
 		core.Blaze_Operation_Vector_Dot,
 		core.DTypeF64,
@@ -93,16 +94,49 @@ func BenchmarkVectorDotProduct(b *testing.B) {
 		core.DTypeF64, // InA
 		core.DTypeF64, // InB
 	)
+	// F32 · F32 -> F64
+	simd.BlazeSIMDDispatchOverrideRequirements(
+		core.Blaze_Operation_Vector_Dot,
+		core.DTypeF64,
+		&override, &overrideFlags,
+		core.DTypeF32, // InA
+		core.DTypeF32, // InB
+	)
+	// F32 · F64 -> F64
+	simd.BlazeSIMDDispatchOverrideRequirements(
+		core.Blaze_Operation_Vector_Dot,
+		core.DTypeF64,
+		&override, &overrideFlags,
+		core.DTypeF32, // InA
+		core.DTypeF64, // InB
+	)
+
 	defer simd.BlazeSIMDDispatchClearAllRequirementOverrides()
 
 	dimensions := []uint64{128, 384, 768, 1024, 100_000, 1_000_000}
 	methods := []string{"Go", "Asm"}
 
-	// F64 · F64 -> F64
-	benchmarkVectorDotProductGeneric[float64](
-		b, dimensions, methods, "F64", "F64", core.DTypeF64,
+	// Combo 1: F64 · F64 -> F64
+	benchmarkVectorDotProductGeneric[float64, float64](
+		b, dimensions, methods, "F64", "F64", "F64", core.DTypeF64,
 		func(a, b memcore.MarkRaw, res *float64) {
 			reduce.BlazeReduceVectorDotProductF64[float64, float64](a, b, res)
+		},
+	)
+
+	// Combo 2: F32 · F32 -> F64
+	benchmarkVectorDotProductGeneric[float32, float32](
+		b, dimensions, methods, "F32", "F32", "F64", core.DTypeF64,
+		func(a, b memcore.MarkRaw, res *float64) {
+			reduce.BlazeReduceVectorDotProductF64[float32, float32](a, b, res)
+		},
+	)
+
+	// Combo 3: F32 · F64 -> F64
+	benchmarkVectorDotProductGeneric[float32, float64](
+		b, dimensions, methods, "F32", "F64", "F64", core.DTypeF64,
+		func(a, b memcore.MarkRaw, res *float64) {
+			reduce.BlazeReduceVectorDotProductF64[float32, float64](a, b, res)
 		},
 	)
 }
@@ -308,18 +342,19 @@ func benchmarkVectorSumGeneric[T foundation.Numeric, U foundation.Numeric](
 }
 
 // benchmarkVectorDotProductGeneric handles 2 Input vectors (A, B) and Scalar Output.
-func benchmarkVectorDotProductGeneric[T foundation.Numeric](
+func benchmarkVectorDotProductGeneric[T foundation.Numeric, U foundation.Numeric](
 	b *testing.B,
 	dimensions []uint64,
 	methods []string,
-	inName string,
+	inNameA string,
+	inNameB string,
 	outName string,
 	outDType core.BlazeDType,
 	reducer func(memcore.MarkRaw, memcore.MarkRaw, *float64),
 ) {
 	for _, method := range methods {
 		for _, dimension := range dimensions {
-			b.Run(fmt.Sprintf("In=%s/Out=%s/Dim=%d/Method=%s", inName, outName, dimension, method), func(b *testing.B) {
+			b.Run(fmt.Sprintf("In=%s·%s/Out=%s/Dim=%d/Method=%s", inNameA, inNameB, outName, dimension, method), func(b *testing.B) {
 
 				type benchData struct {
 					vectorA   memcore.MarkRaw
@@ -332,7 +367,7 @@ func benchmarkVectorDotProductGeneric[T foundation.Numeric](
 				// Dot Product FLOPS: N mults + (N-1) adds ≈ 2*N
 				flopsPerOp := float64(2 * dimension)
 				// Bytes: Read Vector A + Read Vector B
-				bytesPerOp := float64(2 * dimension * memcore.SizeOf[T]())
+				bytesPerOp := float64(dimension*memcore.SizeOf[T]() + dimension*memcore.SizeOf[U]())
 
 				benchmarking.BenchmarkWithMetricsConfig(b,
 					benchmarking.BenchmarkMetricsConfig{
@@ -346,7 +381,7 @@ func benchmarkVectorDotProductGeneric[T foundation.Numeric](
 
 						// Allocate space for 2 vectors
 						allocator := memforge.DynamicLinearAllocatorCreateFunction(
-							uint64(2*dimension*uint64(memcore.SizeOf[T]())+2048),
+							uint64(dimension*uint64(memcore.SizeOf[T]())+dimension*uint64(memcore.SizeOf[U]())+4096),
 							blazetesting.DoubleGrowth,
 						)
 
@@ -358,45 +393,56 @@ func benchmarkVectorDotProductGeneric[T foundation.Numeric](
 							dimension,
 						)
 						// Vector B
-						vecB, _ := memarch.MemArchVectorCreate[T](
+						vecB, _ := memarch.MemArchVectorCreate[U](
 							func(sizeBytes, alignment uint64) memcore.MarkRaw {
 								return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
 							},
 							dimension,
 						)
 
-						// Initialize data
-						var zero T
-						switch any(zero).(type) {
+						// Initialize data A
+						var zeroT T
+						switch any(zeroT).(type) {
 						case float32:
 							memstruct.VectorSetFromSlice(vecA, blazetesting.GenerateRandomVectorF32(dimension, rng))
-							memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF32(dimension, rng))
 						case float64:
 							memstruct.VectorSetFromSlice(vecA, blazetesting.GenerateRandomVectorF64(dimension, rng))
+						default:
+							b.Fatalf("unsupported type A for benchmark")
+						}
+
+						// Initialize data B
+						var zeroU U
+						switch any(zeroU).(type) {
+						case float32:
+							memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF32(dimension, rng))
+						case float64:
 							memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF64(dimension, rng))
 						default:
-							b.Fatalf("unsupported type for benchmark")
+							b.Fatalf("unsupported type B for benchmark")
 						}
 
 						restore := func() {}
 
 						// Force Go fallback if requested
 						if method == "Go" {
-							inputDType := core.BlazeDTypeGet[T]()
+							dtypeA := core.BlazeDTypeGet[T]()
+							dtypeB := core.BlazeDTypeGet[U]()
+
 							// Kernel Key: (Op, Out, InA, InB)
 							old := simd.BlazeSIMDDispatchKernelRemove(
 								core.Blaze_Operation_Vector_Dot,
 								outDType,
-								inputDType,
-								inputDType,
+								dtypeA,
+								dtypeB,
 							)
 							restore = func() {
 								simd.BlazeSIMDDispatchKernelOverride(
 									core.Blaze_Operation_Vector_Dot,
 									outDType,
 									old,
-									inputDType,
-									inputDType,
+									dtypeA,
+									dtypeB,
 								)
 							}
 						}

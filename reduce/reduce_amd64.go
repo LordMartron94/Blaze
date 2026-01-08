@@ -70,6 +70,7 @@ func init() {
 
 	// --- DOT PRODUCT ---
 
+	// F64 x F64 -> F64
 	internal.Register(internal.KernelManifest{
 		// ---- Identity ----
 		Op:     core.Blaze_Operation_Vector_Dot,
@@ -78,6 +79,44 @@ func init() {
 
 		// ---- Implementation ----
 		Func: DotProductF64F64o_AVX2,
+
+		// ---- Constraints ----
+		RequiredISA:   internal.ISA_AVX2 | internal.ISA_FMA3,
+		RequiredFlags: internal.Flag_Aligned32 | internal.Flag_Contiguous,
+
+		// ---- Strategy ----
+		Priority: 20,
+		MinN:     0,
+	})
+
+	// F32 x F32 -> F64
+	internal.Register(internal.KernelManifest{
+		// ---- Identity ----
+		Op:     core.Blaze_Operation_Vector_Dot,
+		Inputs: []core.BlazeDType{core.DTypeF32, core.DTypeF32},
+		Output: core.DTypeF64,
+
+		// ---- Implementation ----
+		Func: DotProductF32F64o_AVX2,
+
+		// ---- Constraints ----
+		RequiredISA:   internal.ISA_AVX2 | internal.ISA_FMA3,
+		RequiredFlags: internal.Flag_Aligned32 | internal.Flag_Contiguous,
+
+		// ---- Strategy ----
+		Priority: 20,
+		MinN:     0,
+	})
+
+	// F32 x F64 -> F64
+	internal.Register(internal.KernelManifest{
+		// ---- Identity ----
+		Op:     core.Blaze_Operation_Vector_Dot,
+		Inputs: []core.BlazeDType{core.DTypeF32, core.DTypeF64},
+		Output: core.DTypeF64,
+
+		// ---- Implementation ----
+		Func: DotProductF32F64__F64o_AVX2,
 
 		// ---- Constraints ----
 		RequiredISA:   internal.ISA_AVX2 | internal.ISA_FMA3,
@@ -143,3 +182,9 @@ func SpeedOfLightTest_Throughput(frame *internal.BlazeKernelFrame)
 
 //go:noescape
 func DotProductF64F64o_AVX2(frame *internal.BlazeKernelFrame)
+
+//go:noescape
+func DotProductF32F64o_AVX2(frame *internal.BlazeKernelFrame)
+
+//go:noescape
+func DotProductF32F64__F64o_AVX2(frame *internal.BlazeKernelFrame)

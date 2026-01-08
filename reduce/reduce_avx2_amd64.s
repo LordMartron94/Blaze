@@ -393,3 +393,269 @@ done:
     MOVSD X0, (CX)
     VZEROUPPER
     RET
+
+TEXT ·DotProductF32F64o_AVX2(SB), NOSPLIT, $0-8
+    MOVQ frame+0(FP), DI
+
+    // 1. Load Context
+    MOVQ FRAME_DIM0(DI), BX      // BX = N (Count)
+    MOVQ FRAME_BUF0_PTR(DI), SI  // SI = Ptr A (F32)
+    MOVQ FRAME_BUF1_PTR(DI), DX  // DX = Ptr B (F32)
+    MOVQ FRAME_RET0(DI), CX      // CX = Return Ptr (F64)
+
+    // 2. Initialize 8 Accumulators (Y0 - Y7)
+    VPXOR Y0, Y0, Y0
+    VPXOR Y1, Y1, Y1
+    VPXOR Y2, Y2, Y2
+    VPXOR Y3, Y3, Y3
+    VPXOR Y4, Y4, Y4
+    VPXOR Y5, Y5, Y5
+    VPXOR Y6, Y6, Y6
+    VPXOR Y7, Y7, Y7
+
+    // -------------------------------------------------------------------------
+    // PRIMARY LOOP: 32 Elements per Iteration
+    // Stride: 32 * 4 bytes = 128 bytes
+    // -------------------------------------------------------------------------
+unrolled_loop:
+    CMPQ BX, $32
+    JL middle_loop
+
+    PREFETCHT0 256(SI) 
+    PREFETCHT0 256(DX)
+
+    // Block 0-3 (Offsets: 0)
+    // VCVTPS2PD: Load 128-bit (4x F32) -> Expand to 256-bit (4x F64)
+    VCVTPS2PD 0(SI), Y8
+    VCVTPS2PD 0(DX), Y9
+    VFMADD231PD Y9, Y8, Y0 
+
+    // Block 4-7 (Offsets: 16)
+    VCVTPS2PD 16(SI), Y10
+    VCVTPS2PD 16(DX), Y11
+    VFMADD231PD Y11, Y10, Y1
+
+    // Block 8-11 (Offsets: 32)
+    VCVTPS2PD 32(SI), Y12
+    VCVTPS2PD 32(DX), Y13
+    VFMADD231PD Y13, Y12, Y2
+
+    // Block 12-15 (Offsets: 48)
+    VCVTPS2PD 48(SI), Y14
+    VCVTPS2PD 48(DX), Y15
+    VFMADD231PD Y15, Y14, Y3
+
+    // Block 16-19 (Offsets: 64) - Reuse Temps Y8-Y9
+    VCVTPS2PD 64(SI), Y8
+    VCVTPS2PD 64(DX), Y9
+    VFMADD231PD Y9, Y8, Y4
+
+    // Block 20-23 (Offsets: 80)
+    VCVTPS2PD 80(SI), Y10
+    VCVTPS2PD 80(DX), Y11
+    VFMADD231PD Y11, Y10, Y5
+
+    // Block 24-27 (Offsets: 96)
+    VCVTPS2PD 96(SI), Y12
+    VCVTPS2PD 96(DX), Y13
+    VFMADD231PD Y13, Y12, Y6
+
+    // Block 28-31 (Offsets: 112)
+    VCVTPS2PD 112(SI), Y14
+    VCVTPS2PD 112(DX), Y15
+    VFMADD231PD Y15, Y14, Y7
+
+    ADDQ $128, SI 
+    ADDQ $128, DX
+    SUBQ $32, BX
+    JMP unrolled_loop
+
+    // -------------------------------------------------------------------------
+    // MIDDLE LOOP: 4 Elements per Iteration
+    // Needed here because scalar conversion fallback is expensive.
+    // -------------------------------------------------------------------------
+middle_loop:
+    CMPQ BX, $4
+    JL merge_accumulators
+
+    VCVTPS2PD 0(SI), Y8
+    VCVTPS2PD 0(DX), Y9
+    VFMADD231PD Y9, Y8, Y0
+
+    ADDQ $16, SI
+    ADDQ $16, DX
+    SUBQ $4, BX
+    JMP middle_loop
+
+    // -------------------------------------------------------------------------
+    // REDUCTION STAGE
+    // -------------------------------------------------------------------------
+merge_accumulators:
+    VADDPD Y1, Y0, Y0
+    VADDPD Y3, Y2, Y2
+    VADDPD Y5, Y4, Y4
+    VADDPD Y7, Y6, Y6
+    
+    VADDPD Y2, Y0, Y0
+    VADDPD Y6, Y4, Y4
+    
+    VADDPD Y4, Y0, Y0 
+
+    // Reduce Vector -> Scalar BEFORE tail loop
+    VEXTRACTF128 $1, Y0, X1 
+    VADDPD X1, X0, X0       
+    MOVHLPS X0, X1          
+    ADDSD X1, X0            
+
+tail:
+    CMPQ BX, $0
+    JE done
+
+    MOVSS 0(SI), X8       // Load F32
+    VCVTSS2SD X8, X8, X8  // Convert to F64
+    
+    MOVSS 0(DX), X9       // Load F32
+    VCVTSS2SD X9, X9, X9  // Convert to F64
+
+    VFMADD231SD X9, X8, X0
+
+    ADDQ $4, SI
+    ADDQ $4, DX
+    DECQ BX
+    JMP tail
+
+done:
+    MOVSD X0, (CX)
+    VZEROUPPER
+    RET
+
+TEXT ·DotProductF32F64__F64o_AVX2(SB), NOSPLIT, $0-8
+    MOVQ frame+0(FP), DI
+
+    // 1. Load Context
+    MOVQ FRAME_DIM0(DI), BX      // BX = N
+    MOVQ FRAME_BUF0_PTR(DI), SI  // SI = Ptr A (F32 - 4 bytes)
+    MOVQ FRAME_BUF1_PTR(DI), DX  // DX = Ptr B (F64 - 8 bytes)
+    MOVQ FRAME_RET0(DI), CX      // CX = Return Ptr
+
+    // 2. Initialize 8 Accumulators (Y0 - Y7)
+    VPXOR Y0, Y0, Y0
+    VPXOR Y1, Y1, Y1
+    VPXOR Y2, Y2, Y2
+    VPXOR Y3, Y3, Y3
+    VPXOR Y4, Y4, Y4
+    VPXOR Y5, Y5, Y5
+    VPXOR Y6, Y6, Y6
+    VPXOR Y7, Y7, Y7
+
+    // -------------------------------------------------------------------------
+    // PRIMARY LOOP: 32 Elements per Iteration
+    // -------------------------------------------------------------------------
+unrolled_loop:
+    CMPQ BX, $32
+    JL middle_loop
+
+    PREFETCHT0 256(SI) // Prefetch F32s (smaller stride)
+    PREFETCHT0 512(DX) // Prefetch F64s (larger stride)
+
+    // Block 0-3
+    // A: 0, B: 0
+    VCVTPS2PD 0(SI), Y8        // Load 4x F32 -> Y8 (F64)
+    VFMADD231PD 0(DX), Y8, Y0  // Y0 += Y8 * MemB(4x F64)
+
+    // Block 4-7
+    // A: 16 (4*4), B: 32 (4*8)
+    VCVTPS2PD 16(SI), Y9
+    VFMADD231PD 32(DX), Y9, Y1
+
+    // Block 8-11
+    // A: 32, B: 64
+    VCVTPS2PD 32(SI), Y10
+    VFMADD231PD 64(DX), Y10, Y2
+
+    // Block 12-15
+    // A: 48, B: 96
+    VCVTPS2PD 48(SI), Y11
+    VFMADD231PD 96(DX), Y11, Y3
+
+    // Block 16-19
+    // A: 64, B: 128
+    VCVTPS2PD 64(SI), Y12
+    VFMADD231PD 128(DX), Y12, Y4
+
+    // Block 20-23
+    // A: 80, B: 160
+    VCVTPS2PD 80(SI), Y13
+    VFMADD231PD 160(DX), Y13, Y5
+
+    // Block 24-27
+    // A: 96, B: 192
+    VCVTPS2PD 96(SI), Y14
+    VFMADD231PD 192(DX), Y14, Y6
+
+    // Block 28-31
+    // A: 112, B: 224
+    VCVTPS2PD 112(SI), Y15
+    VFMADD231PD 224(DX), Y15, Y7
+
+    // Advance Pointers
+    ADDQ $128, SI  // 32 elements * 4 bytes
+    ADDQ $256, DX  // 32 elements * 8 bytes
+    SUBQ $32, BX
+    JMP unrolled_loop
+
+    // -------------------------------------------------------------------------
+    // MIDDLE LOOP: 4 Elements per Iteration
+    // -------------------------------------------------------------------------
+middle_loop:
+    CMPQ BX, $4
+    JL merge_accumulators
+
+    VCVTPS2PD 0(SI), Y8        // Load/Expand A
+    VFMADD231PD 0(DX), Y8, Y0  // Mult/Add B
+
+    ADDQ $16, SI   // 4 * 4
+    ADDQ $32, DX   // 4 * 8
+    SUBQ $4, BX
+    JMP middle_loop
+
+    // -------------------------------------------------------------------------
+    // REDUCTION STAGE
+    // -------------------------------------------------------------------------
+merge_accumulators:
+    VADDPD Y1, Y0, Y0
+    VADDPD Y3, Y2, Y2
+    VADDPD Y5, Y4, Y4
+    VADDPD Y7, Y6, Y6
+    
+    VADDPD Y2, Y0, Y0
+    VADDPD Y6, Y4, Y4
+    
+    VADDPD Y4, Y0, Y0 
+
+    // Reduce Vector -> Scalar BEFORE tail loop
+    VEXTRACTF128 $1, Y0, X1 
+    VADDPD X1, X0, X0       
+    MOVHLPS X0, X1          
+    ADDSD X1, X0            
+
+tail:
+    CMPQ BX, $0
+    JE done
+
+    MOVSS 0(SI), X8       // Load F32 scalar
+    VCVTSS2SD X8, X8, X8  // Convert to F64
+    
+    MOVSD 0(DX), X9       // Load F64 scalar
+
+    VFMADD231SD X9, X8, X0
+
+    ADDQ $4, SI  // Step 4 bytes
+    ADDQ $8, DX  // Step 8 bytes
+    DECQ BX
+    JMP tail
+
+done:
+    MOVSD X0, (CX)
+    VZEROUPPER
+    RET

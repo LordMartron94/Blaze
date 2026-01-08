@@ -45,6 +45,16 @@ func BlazeTestSuite(t *testing.T) {
 			BlazeTestDotProductF64Path[float64, float64](
 				t, allocator, dimension, rng, core.DTypeF64, core.DTypeF64, 1e-13,
 			)
+
+			// F32 · F32 -> F64
+			BlazeTestDotProductF64Path[float32, float32](
+				t, allocator, dimension, rng, core.DTypeF32, core.DTypeF32, 1e-13,
+			)
+
+			// F32 · F64 -> F64
+			BlazeTestDotProductF64Path[float32, float64](
+				t, allocator, dimension, rng, core.DTypeF32, core.DTypeF64, 1e-13,
+			)
 		})
 	}
 }
