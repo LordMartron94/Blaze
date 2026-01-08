@@ -3,7 +3,9 @@ package blaze
 import (
 	"blaze/core"
 	"blaze/reduce"
+	"blaze/scalar"
 	"blaze/simd"
+	"unsafe"
 
 	blazetesting "blaze/testing"
 	"echo"
@@ -55,8 +57,208 @@ func BlazeTestSuite(t *testing.T) {
 			BlazeTestDotProductF64Path[float32, float64](
 				t, allocator, dimension, rng, core.DTypeF32, core.DTypeF64, 1e-13,
 			)
+
+			// --- Scalar Divide Tests ---
+			// F64 / Scalar -> F64
+			BlazeTestScalarVectorDivideF64Path[float64](
+				t, allocator, dimension, rng, core.DTypeF64, 1e-13,
+			)
+			// F32 / Scalar -> F64
+			BlazeTestScalarVectorDivideF64Path[float32](
+				t, allocator, dimension, rng, core.DTypeF32, 1e-5,
+			)
+
+			// --- Scalar Multiply Tests ---
+			// F64 * Scalar -> F64
+			BlazeTestScalarVectorMultiplyF64Path[float64](
+				t, allocator, dimension, rng, core.DTypeF64, 1e-13,
+			)
+			// F32 * Scalar -> F64
+			BlazeTestScalarVectorMultiplyF64Path[float32](
+				t, allocator, dimension, rng, core.DTypeF32, 1e-5,
+			)
 		})
 	}
+}
+
+func BlazeTestScalarVectorMultiplyF64Path[T foundation.Numeric](
+	t *testing.T,
+	allocator memcore.MarkRaw,
+	dimension uint64,
+	rng *rand.Rand,
+	inputDType core.BlazeDType,
+	epsilon float64,
+) {
+	t.Helper()
+
+	// 1. Create Source Vector
+	vectorSrc, _ := memarch.MemArchVectorCreate[T](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
+		},
+		dimension,
+	)
+
+	// 2. Create Destination Vectors (one for ASM, one for Go)
+	vectorDstASM, _ := memarch.MemArchVectorCreate[float64](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
+		},
+		dimension,
+	)
+	vectorDstGo, _ := memarch.MemArchVectorCreate[float64](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
+		},
+		dimension,
+	)
+
+	// 3. Populate Source Data
+	var zeroT T
+	switch any(zeroT).(type) {
+	case float64:
+		memstruct.VectorSetFromSlice(vectorSrc, blazetesting.GenerateRandomVectorF64(dimension, rng))
+	case float32:
+		memstruct.VectorSetFromSlice(vectorSrc, blazetesting.GenerateRandomVectorF32(dimension, rng))
+	default:
+		t.Fatalf("unsupported type for test")
+	}
+
+	// 4. Generate Random Scalar
+	randomScalar := rng.Float64()
+
+	// 5. Run Baseline (ASM)
+	scalar.BlazeScalarVectorMultiplyF64[T](vectorSrc, vectorDstASM, randomScalar)
+
+	// 6. Force Fallback: Remove Kernel
+	// Op: Vector_Scalar_Mul, Out: F64, In: inputDType
+	oldKernel := simd.BlazeSIMDDispatchKernelRemove(
+		core.Blaze_Operation_Vector_Scalar_Mul,
+		core.DTypeF64,
+		inputDType,
+	)
+
+	// 7. Run Go Fallback
+	scalar.BlazeScalarVectorMultiplyF64[T](vectorSrc, vectorDstGo, randomScalar)
+
+	// 8. Restore Kernel
+	simd.BlazeSIMDDispatchKernelOverride(
+		core.Blaze_Operation_Vector_Scalar_Mul,
+		core.DTypeF64,
+		oldKernel,
+		inputDType,
+	)
+
+	// 9. Compare Vectors Element-wise
+	ptrASM := memstruct.VectorDataPtrGet[float64](vectorDstASM)
+	ptrGo := memstruct.VectorDataPtrGet[float64](vectorDstGo)
+
+	sigStr := formatTestSignature(core.DTypeF64, inputDType)
+
+	for i := uint64(0); i < dimension; i++ {
+		valASM := *(*float64)(unsafe.Add(ptrASM, uintptr(i)*8))
+		valGo := *(*float64)(unsafe.Add(ptrGo, uintptr(i)*8))
+
+		AssertClose(t, valGo, valASM, epsilon, fmt.Sprintf("%s[idx=%d]", sigStr, i))
+	}
+
+	echo.On(core.BlazeUUID).
+		Field("sig", sigStr).
+		Field("dimension", dimension).
+		Debug("tested scalar multiply")
+}
+
+/*
+BlazeTestScalarVectorDivideF64Path tests the Scalar Vector Divide operation.
+It runs the operation (Src / Scalar) using the ASM kernel, then forces the Go fallback,
+and compares the resulting vectors element-by-element.
+*/
+func BlazeTestScalarVectorDivideF64Path[T foundation.Numeric](
+	t *testing.T,
+	allocator memcore.MarkRaw,
+	dimension uint64,
+	rng *rand.Rand,
+	inputDType core.BlazeDType,
+	epsilon float64,
+) {
+	t.Helper()
+
+	// 1. Create Source Vector
+	vectorSrc, _ := memarch.MemArchVectorCreate[T](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
+		},
+		dimension,
+	)
+
+	// 2. Create Destination Vectors (one for ASM, one for Go)
+	vectorDstASM, _ := memarch.MemArchVectorCreate[float64](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
+		},
+		dimension,
+	)
+	vectorDstGo, _ := memarch.MemArchVectorCreate[float64](
+		func(sizeBytes, alignment uint64) memcore.MarkRaw {
+			return memforge.DynamicLinearAllocatorMallocUnsafe(allocator, sizeBytes, alignment)
+		},
+		dimension,
+	)
+
+	// 3. Populate Source Data
+	var zeroT T
+	switch any(zeroT).(type) {
+	case float64:
+		memstruct.VectorSetFromSlice(vectorSrc, blazetesting.GenerateRandomVectorF64(dimension, rng))
+	case float32:
+		memstruct.VectorSetFromSlice(vectorSrc, blazetesting.GenerateRandomVectorF32(dimension, rng))
+	default:
+		t.Fatalf("unsupported type for test")
+	}
+
+	// 4. Generate Random Scalar (Avoid 0.0 to prevent Inf comparison headaches)
+	randomScalar := rng.Float64() + 0.1
+
+	// 5. Run Baseline (ASM)
+	// Assuming the function is exposed in 'vector_ops' or similar package
+	scalar.BlazeScalarVectorDivideF64[T](vectorSrc, vectorDstASM, randomScalar)
+
+	// 6. Force Fallback: Remove Kernel
+	// Op: Vector_Scalar_Div, Out: F64, In: inputDType
+	oldKernel := simd.BlazeSIMDDispatchKernelRemove(
+		core.Blaze_Operation_Vector_Scalar_Div,
+		core.DTypeF64,
+		inputDType,
+	)
+
+	// 7. Run Go Fallback
+	scalar.BlazeScalarVectorDivideF64[T](vectorSrc, vectorDstGo, randomScalar)
+
+	// 8. Restore Kernel
+	simd.BlazeSIMDDispatchKernelOverride(
+		core.Blaze_Operation_Vector_Scalar_Div,
+		core.DTypeF64,
+		oldKernel,
+		inputDType,
+	)
+
+	// 9. Compare Vectors Element-wise
+	ptrASM := memstruct.VectorDataPtrGet[float64](vectorDstASM)
+	ptrGo := memstruct.VectorDataPtrGet[float64](vectorDstGo)
+
+	sigStr := formatTestSignature(core.DTypeF64, inputDType)
+
+	for i := uint64(0); i < dimension; i++ {
+		valASM := *(*float64)(unsafe.Add(ptrASM, uintptr(i)*8))
+		valGo := *(*float64)(unsafe.Add(ptrGo, uintptr(i)*8))
+
+		AssertClose(t, valGo, valASM, epsilon, fmt.Sprintf("%s[idx=%d]", sigStr, i))
+	}
+
+	echo.On(core.BlazeUUID).
+		Field("sig", sigStr).
+		Field("dimension", dimension).
+		Debug("tested scalar divide")
 }
 
 /*

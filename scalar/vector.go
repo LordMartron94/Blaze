@@ -1,7 +1,11 @@
 package scalar
 
 import (
+	"blaze/core"
+	"blaze/internal"
+	"blaze/simd"
 	"fmt"
+	"math"
 	"unsafe"
 
 	"foundation"
@@ -405,46 +409,66 @@ func BlazeScalarVectorMultiplyF64[T foundation.Numeric](
 ) {
 	srcData := memstruct.VectorDataPtrGet[T](currentVectorAddr)
 	dstData := memstruct.VectorDataPtrGet[float64](newVectorAddr)
-	srcSize := uintptr(memcore.SizeOf[T]())
-	dstSize := uintptr(memcore.SizeOf[float64]())
-	capacity := memstruct.VectorCapacityGet[T](currentVectorAddr)
+	n := memstruct.VectorCapacityGet[T](currentVectorAddr)
 
-	blazeScalarVectorMultiplyF64Go[T](
-		unsafe.Pointer(srcData), unsafe.Pointer(dstData), srcSize, dstSize, scalar, capacity,
-	)
+	frame := internal.CurrentKernelFrame
+	frame.Reset().
+		WithDim(n, 0, 0).
+		WithBuffer(0, srcData, int64(memcore.SizeOf[T]())).
+		WithBuffer(1, dstData, int64(memcore.SizeOf[float64]())).
+		WithParam(0, math.Float64bits(scalar)).
+		WithFlags(internal.Flag_Contiguous)
+
+	if memcore.IsAligned(srcData, 32) && memcore.IsAligned(dstData, 32) {
+		frame.Flags |= internal.Flag_Aligned32
+	}
+
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_Vector_Scalar_Mul, frame, core.DTypeF64, core.BlazeDTypeGet[T]()) {
+		blazeScalarVectorMultiplyF64Go[T](frame)
+	}
 }
 
 //go:inline
 func blazeScalarVectorMultiplyF64Go[T foundation.Numeric](
-	srcData, dstData unsafe.Pointer, srcSize, dstSize uintptr, scalar float64, capacity uint64,
+	frame *internal.BlazeKernelFrame,
 ) {
-	var i uint64
-
-	// Manually unrolled loop for stride 8
-	for ; i+7 < capacity; i += 8 {
-		v0 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+0)*srcSize))) * scalar
-		v1 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+1)*srcSize))) * scalar
-		v2 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+2)*srcSize))) * scalar
-		v3 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+3)*srcSize))) * scalar
-		v4 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+4)*srcSize))) * scalar
-		v5 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+5)*srcSize))) * scalar
-		v6 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+6)*srcSize))) * scalar
-		v7 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+7)*srcSize))) * scalar
-
-		*(*float64)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = v0
-		*(*float64)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = v1
-		*(*float64)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = v2
-		*(*float64)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = v3
-		*(*float64)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = v4
-		*(*float64)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = v5
-		*(*float64)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = v6
-		*(*float64)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = v7
+	n := frame.Dim[0]
+	if n == 0 {
+		return
 	}
 
-	// Handle remaining elements
-	for ; i < capacity; i++ {
-		v := float64(*(*T)(unsafe.Add(srcData, uintptr(i)*srcSize))) * scalar
-		*(*float64)(unsafe.Add(dstData, uintptr(i)*dstSize)) = v
+	srcPtr := frame.Buffers[0].Ptr
+	dstPtr := frame.Buffers[1].Ptr
+	srcStride := uintptr(frame.Buffers[0].Stride)
+	dstStride := uintptr(frame.Buffers[1].Stride)
+
+	scalar := math.Float64frombits(frame.Params[0])
+
+	var i uint64
+
+	for ; i+7 < n; i += 8 {
+		v0 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+0)*srcStride))) * scalar
+		v1 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+1)*srcStride))) * scalar
+		v2 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+2)*srcStride))) * scalar
+		v3 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+3)*srcStride))) * scalar
+		v4 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+4)*srcStride))) * scalar
+		v5 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+5)*srcStride))) * scalar
+		v6 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+6)*srcStride))) * scalar
+		v7 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+7)*srcStride))) * scalar
+
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+0)*dstStride)) = v0
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+1)*dstStride)) = v1
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+2)*dstStride)) = v2
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+3)*dstStride)) = v3
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+4)*dstStride)) = v4
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+5)*dstStride)) = v5
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+6)*dstStride)) = v6
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+7)*dstStride)) = v7
+	}
+
+	for ; i < n; i++ {
+		v := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i)*srcStride))) * scalar
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i)*dstStride)) = v
 	}
 }
 
@@ -480,37 +504,68 @@ func BlazeScalarVectorDivideF64[T foundation.Numeric](
 ) {
 	srcData := memstruct.VectorDataPtrGet[T](currentVectorAddr)
 	dstData := memstruct.VectorDataPtrGet[float64](newVectorAddr)
-	srcSize := uintptr(memcore.SizeOf[T]())
-	dstSize := uintptr(memcore.SizeOf[float64]())
-	capacity := memstruct.VectorCapacityGet[T](currentVectorAddr)
+	n := memstruct.VectorCapacityGet[T](currentVectorAddr)
+
+	frame := internal.CurrentKernelFrame
+	frame.Reset().
+		WithDim(n, 0, 0).
+		WithBuffer(0, srcData, int64(memcore.SizeOf[T]())).
+		WithBuffer(1, dstData, int64(memcore.SizeOf[float64]())).
+		WithParam(0, math.Float64bits(scalar)).
+		WithFlags(internal.Flag_Contiguous)
+
+	// Check alignment for both source and destination
+	if memcore.IsAligned(srcData, 32) && memcore.IsAligned(dstData, 32) {
+		frame.Flags |= internal.Flag_Aligned32
+	}
+
+	if !simd.BlazeTryExecuteOperation(core.Blaze_Operation_Vector_Scalar_Div, frame, core.DTypeF64, core.BlazeDTypeGet[T]()) {
+		blazeScalarVectorDivideF64Go[T](frame)
+	}
+}
+
+//go:inline
+func blazeScalarVectorDivideF64Go[T foundation.Numeric](frame *internal.BlazeKernelFrame) {
+	n := frame.Dim[0]
+	if n == 0 {
+		return
+	}
+
+	srcPtr := frame.Buffers[0].Ptr
+	dstPtr := frame.Buffers[1].Ptr
+	srcStride := uintptr(frame.Buffers[0].Stride)
+	dstStride := uintptr(frame.Buffers[1].Stride)
+
+	// Reinterpret the bits back to float64
+	scalar := math.Float64frombits(frame.Params[0])
 
 	var i uint64
 
 	// Manually unrolled loop for stride 8
-	for ; i+7 < capacity; i += 8 {
-		v0 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+0)*srcSize))) / scalar
-		v1 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+1)*srcSize))) / scalar
-		v2 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+2)*srcSize))) / scalar
-		v3 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+3)*srcSize))) / scalar
-		v4 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+4)*srcSize))) / scalar
-		v5 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+5)*srcSize))) / scalar
-		v6 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+6)*srcSize))) / scalar
-		v7 := float64(*(*T)(unsafe.Add(srcData, uintptr(i+7)*srcSize))) / scalar
+	for ; i+7 < n; i += 8 {
+		v0 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+0)*srcStride))) / scalar
+		v1 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+1)*srcStride))) / scalar
+		v2 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+2)*srcStride))) / scalar
+		v3 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+3)*srcStride))) / scalar
+		v4 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+4)*srcStride))) / scalar
+		v5 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+5)*srcStride))) / scalar
+		v6 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+6)*srcStride))) / scalar
+		v7 := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i+7)*srcStride))) / scalar
 
-		*(*float64)(unsafe.Add(dstData, uintptr(i+0)*dstSize)) = v0
-		*(*float64)(unsafe.Add(dstData, uintptr(i+1)*dstSize)) = v1
-		*(*float64)(unsafe.Add(dstData, uintptr(i+2)*dstSize)) = v2
-		*(*float64)(unsafe.Add(dstData, uintptr(i+3)*dstSize)) = v3
-		*(*float64)(unsafe.Add(dstData, uintptr(i+4)*dstSize)) = v4
-		*(*float64)(unsafe.Add(dstData, uintptr(i+5)*dstSize)) = v5
-		*(*float64)(unsafe.Add(dstData, uintptr(i+6)*dstSize)) = v6
-		*(*float64)(unsafe.Add(dstData, uintptr(i+7)*dstSize)) = v7
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+0)*dstStride)) = v0
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+1)*dstStride)) = v1
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+2)*dstStride)) = v2
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+3)*dstStride)) = v3
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+4)*dstStride)) = v4
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+5)*dstStride)) = v5
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+6)*dstStride)) = v6
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i+7)*dstStride)) = v7
 	}
 
 	// Handle remaining elements
-	for ; i < capacity; i++ {
-		v := float64(*(*T)(unsafe.Add(srcData, uintptr(i)*srcSize))) / scalar
-		*(*float64)(unsafe.Add(dstData, uintptr(i)*dstSize)) = v
+	for ; i < n; i++ {
+		v := float64(*(*T)(unsafe.Add(srcPtr, uintptr(i)*srcStride))) / scalar
+		*(*float64)(unsafe.Add(dstPtr, uintptr(i)*dstStride)) = v
 	}
 }
 

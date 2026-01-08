@@ -10,6 +10,8 @@ const (
 	Blaze_Operation_SpeedOfLight
 	Blaze_Operation_SpeedOfLightThroughput
 	Blaze_Operation_Vector_Dot
+	Blaze_Operation_Vector_Scalar_Div
+	Blaze_Operation_Vector_Scalar_Mul
 
 	/* BLAZE_OPERATION_COUNT is a constant representing how manu operations are supported.
 
@@ -17,6 +19,21 @@ const (
 	*/
 	BLAZE_OPERATION_COUNT
 )
+
+func BlazeOperationIDString(op BlazeOperationID) string {
+	switch op {
+	case Blaze_Operation_Vector_Sum:
+		return "Vector_Sum"
+	case Blaze_Operation_Vector_Dot:
+		return "Vector_Dot_Product"
+	case Blaze_Operation_Vector_Scalar_Div:
+		return "Vector_Scalar_Div"
+	case Blaze_Operation_Vector_Scalar_Mul:
+		return "Vector_Scalar_Mul"
+	default:
+		return "Unknown"
+	}
+}
 
 /* BlazeDType represents the data type associated with data. */
 type BlazeDType = internal.BlazeDataType

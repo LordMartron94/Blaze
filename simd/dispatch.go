@@ -311,7 +311,7 @@ func BlazeSIMDDispatchClearAllRequirementOverrides() {
 // Helper functions for kernel selection logging
 
 func logKernelSelection(op core.BlazeOperationID, sig uint32, manifest internal.KernelManifest) {
-	opName := formatOperationName(op)
+	opName := core.BlazeOperationIDString(op)
 	sigStr := formatSignature(manifest.Output, manifest.Inputs)
 	isaStr := formatISA(manifest.RequiredISA)
 	flagsStr := formatFlags(manifest.RequiredFlags)
@@ -326,17 +326,6 @@ func logKernelSelection(op core.BlazeOperationID, sig uint32, manifest internal.
 		Field("minN", manifest.MinN).
 		Field("priority", manifest.Priority).
 		Debug("selected kernel")
-}
-
-func formatOperationName(op core.BlazeOperationID) string {
-	switch op {
-	case core.Blaze_Operation_Vector_Sum:
-		return "Vector_Sum"
-	case core.Blaze_Operation_Vector_Dot:
-		return "Vector_Dot_Product"
-	default:
-		return "Unknown"
-	}
 }
 
 func formatSignature(out core.BlazeDType, inputs []core.BlazeDType) string {
