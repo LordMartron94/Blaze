@@ -56,7 +56,7 @@ type ReportGenerator func(statsA, statsB []float64) string
 // RunCalibrationSuite executes the calibration process for the provided targets.
 func RunCalibrationSuite(
 	targets []CalibrationTarget,
-	judge benchmarking.StatisticalStrategy,
+	judges map[core.BlazeOperationID]benchmarking.StatisticalStrategy,
 	reporter ReportGenerator,
 	outputFile string,
 ) {
@@ -69,7 +69,7 @@ func RunCalibrationSuite(
 		Results:     make(map[string]benchmarking.CrossoverResult),
 	}
 
-	// 2. Setup Shared Allocator
+	// 2. Setup Shared Allocator for Input Generation
 	allocator := memforge.DynamicLinearAllocatorCreateFunction(
 		uint64(1*memcore.MegaByte),
 		blazetesting.DoubleGrowth,
@@ -90,7 +90,6 @@ func RunCalibrationSuite(
 		fmt.Printf("\n>>> Calibrating: %s <<<\n", target.Name)
 
 		// A. Force ASM Execution (Global Override)
-		// We override the requirements using the specific signature of the target
 		simd.BlazeSIMDDispatchOverrideRequirements(
 			target.Operation,
 			target.OutputDType,
@@ -119,20 +118,30 @@ func RunCalibrationSuite(
 				ctx.OldKernel,
 				target.InputDTypes...,
 			)
+			// Reset memory to prevent bloat during binary search
+			memforge.DynamicLinearAllocatorReset(allocator)
 		}
 
 		prepareASM := func(p benchmarking.Parameter) CalibrationContext {
-			// ASM is active due to the override in Step A
 			return CalibrationContext{
 				Inputs:    target.CreateInputs(int(p), allocFn, rng),
 				OldKernel: nil,
 			}
 		}
 
-		cleanupASM := func(ctx CalibrationContext) {}
+		cleanupASM := func(ctx CalibrationContext) {
+			// Reset memory to prevent bloat during binary search
+			memforge.DynamicLinearAllocatorReset(allocator)
+		}
 
 		runWorkload := func(ctx CalibrationContext) {
 			target.Execute(ctx.Inputs)
+		}
+
+		// Select Judge
+		judge, exists := judges[target.Operation]
+		if !exists {
+			panic(fmt.Sprintf("No judge strategy defined for operation ID %d", target.Operation))
 		}
 
 		// C. Execute Binary Search

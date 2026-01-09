@@ -11,12 +11,18 @@ import (
 	"memstruct"
 )
 
-// -----------------------------------------------------------------------------
-// Target Definitions (The Table)
-// -----------------------------------------------------------------------------
+// CalibrationBatchSize determines how many distinct vector sets are processed
+// per execution unit.
+//
+// We use 32 to ensure the working set size exceeds L1 Cache (~32KB-48KB).
+// For Dim=384 (F64), 1 pair is 6KB. 32 pairs is 192KB.
+// This forces the benchmark to measure L2/Memory bandwidth performance,
+// preventing the scalar Go code from artificially benefiting from L1 residency
+// and branch prediction memorization.
+const CalibrationBatchSize = 32
 
 // GetStandardTargets returns the official list of kernels that require calibration.
-// This allows the test runner to simply ask for "everything" without knowing details.
+// Updated to use Batched Execution to reflect real-world memory access patterns.
 func GetStandardTargets() []CalibrationTarget {
 	var sinkF64 float64
 	var sinkF32 float32
@@ -28,12 +34,19 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF64},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				vec, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-				memstruct.VectorSetFromSlice(vec, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
-				return []memcore.MarkRaw{vec}
+				// Allocate Batch
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					vec, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(vec, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
+					inputs = append(inputs, vec)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				reduce.BlazeReduceVectorSumF64[float64](inputs[0], &sinkF64)
+				for i := 0; i < len(inputs); i++ {
+					reduce.BlazeReduceVectorSumF64[float64](inputs[i], &sinkF64)
+				}
 			},
 		},
 		{
@@ -42,12 +55,18 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF32},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				vec, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
-				memstruct.VectorSetFromSlice(vec, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
-				return []memcore.MarkRaw{vec}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					vec, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(vec, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
+					inputs = append(inputs, vec)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				reduce.BlazeReduceVectorSumF64[float32](inputs[0], &sinkF64)
+				for i := 0; i < len(inputs); i++ {
+					reduce.BlazeReduceVectorSumF64[float32](inputs[i], &sinkF64)
+				}
 			},
 		},
 		{
@@ -56,12 +75,18 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF32,
 			InputDTypes: []core.BlazeDType{core.DTypeF32},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				vec, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
-				memstruct.VectorSetFromSlice(vec, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
-				return []memcore.MarkRaw{vec}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					vec, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(vec, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
+					inputs = append(inputs, vec)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				reduce.BlazeReduceVectorSumF32[float32](inputs[0], &sinkF32)
+				for i := 0; i < len(inputs); i++ {
+					reduce.BlazeReduceVectorSumF32[float32](inputs[i], &sinkF32)
+				}
 			},
 		},
 		{
@@ -70,16 +95,21 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF64, core.DTypeF64},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				vecA, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-				vecB, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-
-				memstruct.VectorSetFromSlice(vecA, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
-				memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
-
-				return []memcore.MarkRaw{vecA, vecB}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize*2)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					vecA, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					vecB, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(vecA, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
+					memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
+					inputs = append(inputs, vecA, vecB)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				reduce.BlazeReduceVectorDotProductF64[float64, float64](inputs[0], inputs[1], &sinkF64)
+				// Iterate with Stride 2 (VecA, VecB)
+				for i := 0; i < len(inputs); i += 2 {
+					reduce.BlazeReduceVectorDotProductF64[float64, float64](inputs[i], inputs[i+1], &sinkF64)
+				}
 			},
 		},
 		{
@@ -88,16 +118,20 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF32, core.DTypeF32},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				vecA, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
-				vecB, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
-
-				memstruct.VectorSetFromSlice(vecA, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
-				memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
-
-				return []memcore.MarkRaw{vecA, vecB}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize*2)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					vecA, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
+					vecB, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(vecA, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
+					memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
+					inputs = append(inputs, vecA, vecB)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				reduce.BlazeReduceVectorDotProductF64[float32, float32](inputs[0], inputs[1], &sinkF64)
+				for i := 0; i < len(inputs); i += 2 {
+					reduce.BlazeReduceVectorDotProductF64[float32, float32](inputs[i], inputs[i+1], &sinkF64)
+				}
 			},
 		},
 		{
@@ -106,16 +140,20 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF32, core.DTypeF64},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				vecA, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
-				vecB, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-
-				memstruct.VectorSetFromSlice(vecA, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
-				memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
-
-				return []memcore.MarkRaw{vecA, vecB}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize*2)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					vecA, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
+					vecB, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(vecA, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
+					memstruct.VectorSetFromSlice(vecB, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
+					inputs = append(inputs, vecA, vecB)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				reduce.BlazeReduceVectorDotProductF64[float32, float64](inputs[0], inputs[1], &sinkF64)
+				for i := 0; i < len(inputs); i += 2 {
+					reduce.BlazeReduceVectorDotProductF64[float32, float64](inputs[i], inputs[i+1], &sinkF64)
+				}
 			},
 		},
 		{
@@ -124,14 +162,19 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF64},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				src, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-				memstruct.VectorSetFromSlice(src, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
-				dst, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-
-				return []memcore.MarkRaw{src, dst}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize*2)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					src, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					dst, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(src, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
+					inputs = append(inputs, src, dst)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				scalar.BlazeScalarVectorDivideF64[float64](inputs[0], inputs[1], 1.234)
+				for i := 0; i < len(inputs); i += 2 {
+					scalar.BlazeScalarVectorDivideF64[float64](inputs[i], inputs[i+1], 1.234)
+				}
 			},
 		},
 		{
@@ -140,15 +183,19 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF32},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				src, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
-				memstruct.VectorSetFromSlice(src, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
-
-				dst, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-
-				return []memcore.MarkRaw{src, dst}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize*2)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					src, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
+					dst, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(src, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
+					inputs = append(inputs, src, dst)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				scalar.BlazeScalarVectorDivideF64[float32](inputs[0], inputs[1], 1.234)
+				for i := 0; i < len(inputs); i += 2 {
+					scalar.BlazeScalarVectorDivideF64[float32](inputs[i], inputs[i+1], 1.234)
+				}
 			},
 		},
 		{
@@ -157,14 +204,19 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF64},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				src, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-				memstruct.VectorSetFromSlice(src, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
-				dst, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-
-				return []memcore.MarkRaw{src, dst}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize*2)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					src, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					dst, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(src, blazetesting.GenerateRandomVectorF64(uint64(size), rng))
+					inputs = append(inputs, src, dst)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				scalar.BlazeScalarVectorMultiplyF64[float64](inputs[0], inputs[1], 1.234)
+				for i := 0; i < len(inputs); i += 2 {
+					scalar.BlazeScalarVectorMultiplyF64[float64](inputs[i], inputs[i+1], 1.234)
+				}
 			},
 		},
 		{
@@ -173,15 +225,19 @@ func GetStandardTargets() []CalibrationTarget {
 			OutputDType: core.DTypeF64,
 			InputDTypes: []core.BlazeDType{core.DTypeF32},
 			CreateInputs: func(size int, allocFn func(uint64, uint64) memcore.MarkRaw, rng *rand.Rand) []memcore.MarkRaw {
-				src, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
-				memstruct.VectorSetFromSlice(src, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
-
-				dst, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
-
-				return []memcore.MarkRaw{src, dst}
+				inputs := make([]memcore.MarkRaw, 0, CalibrationBatchSize*2)
+				for i := 0; i < CalibrationBatchSize; i++ {
+					src, _ := memarch.MemArchVectorCreate[float32](allocFn, uint64(size))
+					dst, _ := memarch.MemArchVectorCreate[float64](allocFn, uint64(size))
+					memstruct.VectorSetFromSlice(src, blazetesting.GenerateRandomVectorF32(uint64(size), rng))
+					inputs = append(inputs, src, dst)
+				}
+				return inputs
 			},
 			Execute: func(inputs []memcore.MarkRaw) {
-				scalar.BlazeScalarVectorMultiplyF64[float32](inputs[0], inputs[1], 1.234)
+				for i := 0; i < len(inputs); i += 2 {
+					scalar.BlazeScalarVectorMultiplyF64[float32](inputs[i], inputs[i+1], 1.234)
+				}
 			},
 		},
 	}

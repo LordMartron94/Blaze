@@ -7,10 +7,7 @@ import (
 )
 
 func DoubleGrowth(currentCap, needed uint64) uint64 {
-	newSize := currentCap * 2
-	if newSize < needed {
-		newSize = needed
-	}
+	newSize := max(currentCap*2, needed)
 
 	if newSize > uint64(1*memcore.GigaByte) {
 		panic("way too much memory for a simple test")
