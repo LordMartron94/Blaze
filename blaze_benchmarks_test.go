@@ -204,6 +204,7 @@ func BenchmarkVectorMemoryThroughput(b *testing.B) {
 					memstruct.VectorSetFromSlice(vector, blazetesting.GenerateRandomVectorF64(dimension, rng))
 					return benchData{vector: vector, oldGC: oldGC, allocator: allocator}
 				},
+				nil,
 				func(d benchData, b *testing.B) {
 					benchmarking.RunBatchedBenchmark(
 						b,
@@ -308,6 +309,7 @@ func benchmarkVectorSumGeneric[T foundation.Numeric, U foundation.Numeric](
 							restore:   restore,
 						}
 					},
+					nil,
 					// --- MEASUREMENT Phase ---
 					func(d benchData, b *testing.B) {
 						benchmarking.RunBatchedBenchmark(
@@ -455,6 +457,7 @@ func benchmarkVectorDotProductGeneric[T foundation.Numeric, U foundation.Numeric
 							restore:   restore,
 						}
 					},
+					nil,
 					// --- MEASUREMENT Phase ---
 					func(d benchData, b *testing.B) {
 						benchmarking.RunBatchedBenchmark(
